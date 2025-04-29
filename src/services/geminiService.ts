@@ -21,6 +21,12 @@ export interface GenerateContentResponse {
   };
 }
 
+export interface Topic {
+  id: string;
+  title: string;
+  description: string;
+}
+
 export interface TutorialSection {
   title: string;
   content: string;
@@ -30,6 +36,8 @@ export interface TutorialSection {
 class GeminiService {
   private genAI: GoogleGenerativeAI | null = null;
   private model: any = null;
+  private readonly MAX_RETRIES = 3;
+  private readonly INITIAL_DELAY = 1000; // 1 second
 
   constructor(config?: GeminiConfig) {
     if (config?.apiKey) {
@@ -47,17 +55,43 @@ class GeminiService {
     }
   }
 
+  private async retryWithExponentialBackoff<T>(
+    operation: () => Promise<T>,
+    retryCount = 0
+  ): Promise<T> {
+    try {
+      return await operation();
+    } catch (error: any) {
+      if (
+        retryCount >= this.MAX_RETRIES ||
+        (error?.message && !error.message.includes('503'))
+      ) {
+        throw error;
+      }
+
+      const delay = this.INITIAL_DELAY * Math.pow(2, retryCount);
+      console.log(`Retrying after ${delay}ms (attempt ${retryCount + 1}/${this.MAX_RETRIES})`);
+      
+      await new Promise(resolve => setTimeout(resolve, delay));
+      return this.retryWithExponentialBackoff(operation, retryCount + 1);
+    }
+  }
+
   async generateContent(request: GenerateContentRequest): Promise<GenerateContentResponse> {
     if (!this.model) {
       throw new Error('Gemini API not initialized. Please set API key first.');
     }
 
     try {
-      const result = await this.model.generateContent({
-        contents: [{
-          parts: [{ text: request.prompt }]
-        }]
+      const result = await this.retryWithExponentialBackoff(async () => {
+        const response = await this.model.generateContent({
+          contents: [{
+            parts: [{ text: request.prompt }]
+          }]
+        });
+        return response;
       });
+
       const response = await result.response;
       const text = response.text();
 
@@ -71,48 +105,73 @@ class GeminiService {
       };
     } catch (error) {
       console.error('Gemini API error:', error);
-      throw new Error('Failed to generate content. Please try again later.');
+      throw new Error(
+        'Failed to generate content after multiple attempts. The service might be temporarily unavailable. Please try again later.'
+      );
     }
   }
 
-  async generateTopics(subject: string): Promise<string[]> {
+  async generateTopicsList(subject: string): Promise<Topic[]> {
     const prompt = `
-      Generate a list of 6-8 main topics or concepts that are essential to understanding ${subject}.
-      Format each topic as a clear, concise title (2-4 words).
-      Return only the topic titles, one per line, without numbers or bullets.
-      Example format:
-      Variables and Types
-      Control Structures
-      Functions and Methods
+      Create a structured learning path for ${subject} with 6-8 topics.
+      For each topic, provide:
+      1. A clear, concise title
+      2. A brief description of what will be covered
+      3. A unique ID
+
+      Format the response as:
+      TOPIC
+      ID: [unique_id]
+      TITLE: [topic_title]
+      DESCRIPTION: [brief_description]
+      END_TOPIC
+
+      Start with fundamentals and progress to more advanced concepts.
+      Make each topic self-contained but build upon previous knowledge.
     `;
     
     const response = await this.generateContent({ prompt });
+    
     return response.text
-      .split('\n')
-      .map(line => line.trim())
-      .filter(line => line.length > 0);
+      .split('END_TOPIC')
+      .map(topic => topic.trim())
+      .filter(topic => topic.length > 0)
+      .map(topic => {
+        const idMatch = topic.match(/ID:\s*(.+)/);
+        const titleMatch = topic.match(/TITLE:\s*(.+)/);
+        const descMatch = topic.match(/DESCRIPTION:\s*(.+)/);
+        
+        return {
+          id: idMatch?.[1]?.trim() || `topic_${Date.now()}`,
+          title: titleMatch?.[1]?.trim() || 'Untitled Topic',
+          description: descMatch?.[1]?.trim() || 'No description available'
+        };
+      });
   }
 
-  async generateTutorialContent(subject: string, level: string): Promise<TutorialSection[]> {
+  async generateTutorialContent(topicId: string, subject: string, level: string): Promise<TutorialSection[]> {
     const prompt = `
-      Create a structured tutorial about ${subject} for a ${level} level student.
-      Format the response in clear sections, each with a title, main content, and examples.
-      Make the content conversational, as if a teacher is speaking directly to the student.
+      Create a video tutorial script for the topic "${topicId}" in ${subject} for a ${level} level student.
+      Format the content in clear sections, each with:
+      1. A title
+      2. Main content (written in a conversational style)
+      3. Practical examples
       
       Structure each section like this:
       SECTION_TITLE: [Title]
-      CONTENT: [Main explanation]
+      CONTENT: [Main explanation in conversational style]
       EXAMPLES: [Practical example 1]
       EXAMPLES: [Practical example 2]
       END_SECTION
       
       Include 3-4 sections that build upon each other.
-      Use clear, simple language appropriate for ${level} level.
-      Focus on practical understanding and real-world applications.
+      Make the content engaging and suitable for video presentation.
     `;
     
     const response = await this.generateContent({ prompt });
-    const sections = response.text.split('END_SECTION')
+    
+    return response.text
+      .split('END_SECTION')
       .map(section => section.trim())
       .filter(section => section.length > 0)
       .map(section => {
@@ -126,8 +185,6 @@ class GeminiService {
           examples: Array.from(examplesMatches, m => m[1]?.trim() || '')
         };
       });
-    
-    return sections;
   }
 
   async answerQuestion(question: string, context: string, level: string): Promise<string> {
@@ -152,6 +209,5 @@ class GeminiService {
   }
 }
 
-export const geminiService = new GeminiService();
-
+const geminiService = new GeminiService();
 export default geminiService;
