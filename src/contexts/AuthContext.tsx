@@ -48,9 +48,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         .from('users')
         .select('gemini_api_key')
         .eq('id', userId)
-        .single();
+        .limit(1)
+        .maybeSingle();
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error loading Gemini API key:', error);
+        return;
+      }
       
       if (data?.gemini_api_key) {
         setGeminiApiKey(data.gemini_api_key);
@@ -84,16 +88,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (signUpError) throw signUpError;
 
     if (data.user) {
-      const { error: profileError } = await supabase
-        .from('users')
-        .insert([
-          {
-            id: data.user.id,
-            email: data.user.email,
-          },
-        ]);
+      try {
+        const { error: profileError } = await supabase
+          .from('users')
+          .insert([
+            {
+              id: data.user.id,
+              email: data.user.email,
+            },
+          ])
+          .select()
+          .single();
 
-      if (profileError) throw profileError;
+        if (profileError) throw profileError;
+      } catch (error) {
+        console.error('Error creating user profile:', error);
+        throw new Error('Failed to create user profile');
+      }
     }
   };
 
@@ -109,7 +120,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const { error } = await supabase
       .from('users')
       .update({ gemini_api_key: apiKey })
-      .eq('id', user.id);
+      .eq('id', user.id)
+      .select()
+      .single();
 
     if (error) throw error;
 
