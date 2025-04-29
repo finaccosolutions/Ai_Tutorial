@@ -30,7 +30,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setLoading(false);
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       setUser(session?.user ?? null);
       if (session?.user) {
         loadGeminiApiKey(session.user.id);
@@ -59,6 +59,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (data?.gemini_api_key) {
         setGeminiApiKey(data.gemini_api_key);
         geminiService.initialize(data.gemini_api_key);
+      } else {
+        // If no API key is found, prompt user to enter one
+        const apiKey = window.prompt('Please enter your Gemini API key to continue:');
+        if (apiKey) {
+          await updateGeminiApiKey(apiKey);
+        }
       }
     } catch (error) {
       console.error('Error loading Gemini API key:', error);
@@ -75,36 +81,45 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const register = async (email: string, password: string, name: string) => {
-    const { error: signUpError, data } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: {
-          name,
+    try {
+      // First sign up the user with Supabase Auth
+      const { error: signUpError, data } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            name,
+          },
         },
-      },
-    });
+      });
 
-    if (signUpError) throw signUpError;
+      if (signUpError) throw signUpError;
 
-    if (data.user) {
-      try {
-        const { error: profileError } = await supabase
-          .from('users')
-          .insert([
-            {
-              id: data.user.id,
-              email: data.user.email,
-            },
-          ])
-          .select()
-          .single();
+      if (!data.user) throw new Error('No user data returned from signup');
 
-        if (profileError) throw profileError;
-      } catch (error) {
-        console.error('Error creating user profile:', error);
-        throw new Error('Failed to create user profile');
+      // Wait a moment for the auth session to be established
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      // Create the user profile
+      const { error: profileError } = await supabase
+        .from('users')
+        .insert([
+          {
+            id: data.user.id,
+            email: data.user.email,
+          },
+        ]);
+
+      if (profileError) throw profileError;
+
+      // Prompt for API key after successful registration
+      const apiKey = window.prompt('Please enter your Gemini API key to continue:');
+      if (apiKey) {
+        await updateGeminiApiKey(apiKey);
       }
+    } catch (error) {
+      console.error('Error during registration:', error);
+      throw error;
     }
   };
 
