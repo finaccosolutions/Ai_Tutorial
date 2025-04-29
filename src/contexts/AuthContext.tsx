@@ -59,12 +59,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (data?.gemini_api_key) {
         setGeminiApiKey(data.gemini_api_key);
         geminiService.initialize(data.gemini_api_key);
-      } else {
-        // If no API key is found, prompt user to enter one
-        const apiKey = window.prompt('Please enter your Gemini API key to continue:');
-        if (apiKey) {
-          await updateGeminiApiKey(apiKey);
-        }
       }
     } catch (error) {
       console.error('Error loading Gemini API key:', error);
@@ -111,12 +105,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         ]);
 
       if (profileError) throw profileError;
-
-      // Prompt for API key after successful registration
-      const apiKey = window.prompt('Please enter your Gemini API key to continue:');
-      if (apiKey) {
-        await updateGeminiApiKey(apiKey);
-      }
     } catch (error) {
       console.error('Error during registration:', error);
       throw error;
@@ -142,7 +130,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (error) throw error;
 
     setGeminiApiKey(apiKey);
-    geminiService.initialize(apiKey);
+    if (apiKey) {
+      geminiService.initialize(apiKey);
+    }
   };
 
   return (

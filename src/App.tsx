@@ -9,11 +9,12 @@ import Onboarding from './pages/Onboarding';
 import Dashboard from './pages/Dashboard';
 import Lesson from './pages/Lesson';
 import Settings from './pages/Settings';
+import ApiKeySetup from './pages/ApiKeySetup';
 import Layout from './components/shared/Layout';
 
 // Protected route component
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
-  const { user, loading } = useAuth();
+  const { user, loading, geminiApiKey } = useAuth();
   
   if (loading) {
     return <div className="flex items-center justify-center min-h-screen">Loading...</div>;
@@ -21,6 +22,10 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   
   if (!user) {
     return <Navigate to="/login" />;
+  }
+
+  if (!geminiApiKey) {
+    return <Navigate to="/api-key-setup" />;
   }
   
   return <>{children}</>;
@@ -31,6 +36,7 @@ function App() {
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
+      <Route path="/api-key-setup" element={<ApiKeySetup />} />
       
       <Route path="/" element={
         <ProtectedRoute>

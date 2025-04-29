@@ -49,7 +49,7 @@ class GeminiService {
       return {
         text,
         usage: {
-          promptTokens: 0, // Gemini API doesn't provide token counts
+          promptTokens: 0,
           completionTokens: 0,
           totalTokens: 0
         }
@@ -60,16 +60,55 @@ class GeminiService {
     }
   }
 
-  async generateTutorial(subject: string, level: string): Promise<string> {
-    const prompt = `Create an educational tutorial about ${subject} for a ${level} level student. 
-                   Include clear explanations, examples, and key concepts.`;
+  async generateTutorialContent(subject: string, level: string): Promise<string> {
+    const prompt = `
+      Create a detailed, conversational tutorial about ${subject} for a ${level} level student.
+      Structure the content as if you're a friendly tutor speaking directly to the student.
+      Include:
+      - A warm introduction
+      - Clear explanations of key concepts
+      - Real-world examples
+      - Interactive elements where you ask the student questions
+      - Natural breaks where students might have questions
+      
+      Make the tone engaging and conversational, as this will be read aloud.
+    `;
     
     const response = await this.generateContent({ prompt });
     return response.text;
   }
 
-  async answerQuestion(question: string, context: string): Promise<string> {
-    const prompt = `Given the context about ${context}, please answer this question: ${question}`;
+  async answerQuestion(question: string, context: string, level: string): Promise<string> {
+    const prompt = `
+      As a helpful tutor, answer this question about ${context} for a ${level} level student:
+      "${question}"
+      
+      Provide a clear, conversational explanation that:
+      - Directly addresses the question
+      - Uses language appropriate for their level
+      - Connects the answer back to the main topic
+      - Encourages further learning
+      
+      Make the response sound natural and engaging, as it will be read aloud.
+    `;
+    
+    const response = await this.generateContent({ prompt });
+    return response.text;
+  }
+
+  async generateNextSection(currentContent: string, subject: string, level: string): Promise<string> {
+    const prompt = `
+      Continue the tutorial about ${subject} for a ${level} level student.
+      Previous content: "${currentContent.slice(-500)}"
+      
+      Generate the next section that:
+      - Flows naturally from the previous content
+      - Introduces new but related concepts
+      - Maintains the conversational teaching style
+      - Includes interactive elements
+      
+      Keep the tone engaging and natural for voice delivery.
+    `;
     
     const response = await this.generateContent({ prompt });
     return response.text;
