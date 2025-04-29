@@ -14,22 +14,46 @@ const Register: React.FC = () => {
   const navigate = useNavigate();
   const { register } = useAuth();
 
+  const validateForm = () => {
+    if (!name.trim()) {
+      setError('Please enter your name');
+      return false;
+    }
+
+    if (!email.trim()) {
+      setError('Please enter your email');
+      return false;
+    }
+
+    // Basic email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      setError('Please enter a valid email address');
+      return false;
+    }
+
+    if (!password) {
+      setError('Please enter a password');
+      return false;
+    }
+
+    if (password.length < 6) {
+      setError('Password must be at least 6 characters');
+      return false;
+    }
+
+    if (password !== confirmPassword) {
+      setError('Passwords do not match');
+      return false;
+    }
+
+    return true;
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Validation
-    if (!name || !email || !password || !confirmPassword) {
-      setError('Please fill out all fields');
-      return;
-    }
-    
-    if (password !== confirmPassword) {
-      setError('Passwords do not match');
-      return;
-    }
-    
-    if (password.length < 6) {
-      setError('Password must be at least 6 characters');
+    if (!validateForm()) {
       return;
     }
     
@@ -37,10 +61,23 @@ const Register: React.FC = () => {
     setIsLoading(true);
     
     try {
-      await register(email, password, name);
+      const { user, error: authError } = await register(email, password, name);
+      
+      if (authError) throw authError;
+      
+      // If registration is successful, navigate to onboarding
       navigate('/onboarding');
-    } catch (err) {
-      setError('Failed to create account. Please try again.');
+    } catch (err: any) {
+      console.error('Registration error:', err);
+      
+      // Handle Supabase errors
+      if (err.message) {
+        setError(err.message);
+      } else if (err.error_description) {
+        setError(err.error_description);
+      } else {
+        setError('Failed to create account. Please try again.');
+      }
     } finally {
       setIsLoading(false);
     }
@@ -70,8 +107,8 @@ const Register: React.FC = () => {
               </div>
             )}
             
-            <form onSubmit={handleSubmit}>
-              <div className="mb-4">
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div>
                 <label htmlFor="name" className="block text-sm font-medium text-neutral-700 mb-1">
                   Full Name
                 </label>
@@ -86,11 +123,14 @@ const Register: React.FC = () => {
                     onChange={(e) => setName(e.target.value)}
                     className="input pl-10"
                     placeholder="John Doe"
+                    required
+                    minLength={2}
+                    maxLength={50}
                   />
                 </div>
               </div>
               
-              <div className="mb-4">
+              <div>
                 <label htmlFor="email" className="block text-sm font-medium text-neutral-700 mb-1">
                   Email Address
                 </label>
@@ -105,11 +145,12 @@ const Register: React.FC = () => {
                     onChange={(e) => setEmail(e.target.value)}
                     className="input pl-10"
                     placeholder="you@example.com"
+                    required
                   />
                 </div>
               </div>
               
-              <div className="mb-4">
+              <div>
                 <label htmlFor="password" className="block text-sm font-medium text-neutral-700 mb-1">
                   Password
                 </label>
@@ -124,11 +165,16 @@ const Register: React.FC = () => {
                     onChange={(e) => setPassword(e.target.value)}
                     className="input pl-10"
                     placeholder="••••••••"
+                    required
+                    minLength={6}
                   />
                 </div>
+                <p className="mt-1 text-sm text-neutral-500">
+                  Must be at least 6 characters
+                </p>
               </div>
               
-              <div className="mb-6">
+              <div>
                 <label htmlFor="confirmPassword" className="block text-sm font-medium text-neutral-700 mb-1">
                   Confirm Password
                 </label>
@@ -143,6 +189,7 @@ const Register: React.FC = () => {
                     onChange={(e) => setConfirmPassword(e.target.value)}
                     className="input pl-10"
                     placeholder="••••••••"
+                    required
                   />
                 </div>
               </div>
