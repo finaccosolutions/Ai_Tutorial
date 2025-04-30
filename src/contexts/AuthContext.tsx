@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { User } from '@supabase/supabase-js';
 import geminiService from '../services/geminiService';
+import slideService from '../services/slideService';
 
 interface AuthContextType {
   user: User | null;
@@ -59,6 +60,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (data?.gemini_api_key) {
         setGeminiApiKey(data.gemini_api_key);
         geminiService.initialize(data.gemini_api_key);
+        slideService.initialize(data.gemini_api_key); // Initialize slide service
       }
     } catch (error) {
       console.error('Error loading Gemini API key:', error);
@@ -132,6 +134,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setGeminiApiKey(apiKey);
     if (apiKey) {
       geminiService.initialize(apiKey);
+      slideService.initialize(apiKey); // Initialize slide service
     }
   };
 
