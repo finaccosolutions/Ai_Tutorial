@@ -4,7 +4,29 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Play, Pause, Volume2, VolumeX, MessageSquare, ArrowLeft, Mic, X, Send, RefreshCw, ChevronRight, ChevronLeft } from 'lucide-react';
 import { useUserPreferences } from '../contexts/UserPreferencesContext';
 import { speak, stopSpeaking } from '../services/voiceService';
-import geminiService, { TutorialSection, Topic } from '../services/geminiService';
+import geminiService from '../services/geminiService';
+import VideoPlayer from '../components/tutorial/VideoPlayer';
+import Quiz from '../components/tutorial/Quiz';
+import Transcript from '../components/tutorial/Transcript';
+
+interface TutorialContent {
+  title: string;
+  sections: {
+    title: string;
+    content: string;
+    videoUrl: string;
+    captions: Array<{
+      start: number;
+      end: number;
+      text: string;
+    }>;
+    quiz: {
+      question: string;
+      options: string[];
+      correctAnswer: number;
+    };
+  }[];
+}
 
 const Lesson: React.FC = () => {
   const { topicId } = useParams<{ topicId: string }>();
@@ -12,36 +34,16 @@ const Lesson: React.FC = () => {
   const navigate = useNavigate();
   
   // State
-  const [sections, setSections] = useState<TutorialSection[]>([]);
+  const [tutorialContent, setTutorialContent] = useState<TutorialContent | null>(null);
   const [currentSectionIndex, setCurrentSectionIndex] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [isPaused, setIsPaused] = useState(true);
-  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [showQuiz, setShowQuiz] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
   const [showChat, setShowChat] = useState(false);
   const [question, setQuestion] = useState('');
   const [answer, setAnswer] = useState<string | null>(null);
   const [isAnswering, setIsAnswering] = useState(false);
-  const [topics, setTopics] = useState<Topic[]>([]);
-  const [currentTopicIndex, setCurrentTopicIndex] = useState(0);
-  
-  // Load topics and find current topic index
-  useEffect(() => {
-    const loadTopics = async () => {
-      if (!preferences?.subject) return;
-      
-      try {
-        const topicsList = await geminiService.generateTopicsList(preferences.subject);
-        setTopics(topicsList);
-        const index = topicsList.findIndex(topic => topic.id === topicId);
-        setCurrentTopicIndex(index >= 0 ? index : 0);
-      } catch (error) {
-        console.error('Error loading topics:', error);
-      }
-    };
-    
-    loadTopics();
-  }, [preferences?.subject, topicId]);
 
   // Load tutorial content
   useEffect(() => {
@@ -54,15 +56,33 @@ const Lesson: React.FC = () => {
       setIsLoading(true);
       setError(null);
       try {
-        const content = await geminiService.generateTutorialContent(
+        const sections = await geminiService.generateTutorialContent(
           topicId,
           preferences.subject,
           preferences.knowledgeLevel
         );
-        setSections(content);
-        setCurrentSectionIndex(0);
-        setIsPaused(true);
-        setIsSpeaking(false);
+
+        // Transform sections into tutorial content
+        const content: TutorialContent = {
+          title: `${preferences.subject} - ${topicId}`,
+          sections: sections.map((section, index) => ({
+            title: section.title,
+            content: section.content,
+            videoUrl: `https://example.com/tutorials/${topicId}/section${index + 1}.m3u8`, // Replace with actual video URL
+            captions: section.content.split('.').map((sentence, i) => ({
+              start: i * 5,
+              end: (i + 1) * 5 - 0.5,
+              text: sentence.trim()
+            })).filter(caption => caption.text),
+            quiz: {
+              question: "What is the main concept covered in this section?",
+              options: ["Option A", "Option B", "Option C", "Option D"],
+              correctAnswer: 0
+            }
+          }))
+        };
+
+        setTutorialContent(content);
       } catch (error: any) {
         console.error('Error loading tutorial:', error);
         setError(error.message || 'Failed to load tutorial content. Please try again.');
@@ -74,51 +94,27 @@ const Lesson: React.FC = () => {
     loadTutorial();
   }, [topicId, preferences]);
 
-  // Handle playback
-  useEffect(() => {
-    if (!sections[currentSectionIndex] || isPaused || !isSpeaking) {
-      stopSpeaking();
-      return;
-    }
-
-    const section = sections[currentSectionIndex];
-    const text = `${section.title}. ${section.content}`;
-    
-    speak(text, () => {
-      if (currentSectionIndex < sections.length - 1) {
+  const handleQuizComplete = (correct: boolean) => {
+    setTimeout(() => {
+      setShowQuiz(false);
+      if (correct && currentSectionIndex < (tutorialContent?.sections.length || 0) - 1) {
         setCurrentSectionIndex(prev => prev + 1);
-      } else {
-        setIsSpeaking(false);
-        setIsPaused(true);
       }
-    });
+    }, 2000);
+  };
 
-    return () => stopSpeaking();
-  }, [currentSectionIndex, sections, isPaused, isSpeaking]);
-
-  // Navigation between topics
-  const navigateToTopic = (direction: 'prev' | 'next') => {
-    const newIndex = direction === 'next' 
-      ? currentTopicIndex + 1 
-      : currentTopicIndex - 1;
-    
-    if (newIndex >= 0 && newIndex < topics.length) {
-      navigate(`/lesson/${topics[newIndex].id}`);
+  const handleTimeUpdate = (time: number) => {
+    setCurrentTime(time);
+    // Show quiz every 2 minutes
+    if (Math.floor(time) % 120 === 0 && time > 0) {
+      setShowQuiz(true);
     }
   };
 
-  // Playback controls
-  const togglePlayback = () => {
-    setIsPaused(!isPaused);
-    if (isPaused && !isSpeaking) {
-      setIsSpeaking(true);
-    }
-  };
-
-  const toggleSpeech = () => {
-    setIsSpeaking(!isSpeaking);
-    if (isSpeaking) {
-      stopSpeaking();
+  const handleTimestampClick = (time: number) => {
+    const videoElement = document.querySelector('video');
+    if (videoElement) {
+      videoElement.currentTime = time;
     }
   };
 
@@ -135,10 +131,6 @@ const Lesson: React.FC = () => {
         preferences.knowledgeLevel
       );
       setAnswer(response);
-      
-      if (isSpeaking) {
-        speak(response);
-      }
     } catch (error: any) {
       console.error('Error getting answer:', error);
       setAnswer(error.message || 'Sorry, I couldn\'t process your question. Please try again.');
@@ -163,7 +155,7 @@ const Lesson: React.FC = () => {
     );
   }
 
-  if (error) {
+  if (error || !tutorialContent) {
     return (
       <div className="min-h-screen bg-neutral-50 flex items-center justify-center">
         <div className="text-center max-w-lg px-4">
@@ -193,8 +185,10 @@ const Lesson: React.FC = () => {
     );
   }
 
+  const currentSection = tutorialContent.sections[currentSectionIndex];
+
   return (
-    <div className="min-h-screen bg-neutral-50 flex flex-col">
+    <div className="min-h-screen bg-neutral-50">
       {/* Header */}
       <div className="bg-white border-b border-neutral-200 py-4">
         <div className="container mx-auto px-4 flex justify-between items-center">
@@ -210,24 +204,6 @@ const Lesson: React.FC = () => {
           
           <div className="flex items-center space-x-4">
             <button
-              onClick={togglePlayback}
-              className={`p-2 rounded-full ${
-                isPaused ? 'bg-primary-100 text-primary-700' : 'bg-neutral-100 text-neutral-700'
-              } hover:bg-primary-200`}
-            >
-              {isPaused ? <Play className="h-5 w-5" /> : <Pause className="h-5 w-5" />}
-            </button>
-            
-            <button
-              onClick={toggleSpeech}
-              className={`p-2 rounded-full ${
-                isSpeaking ? 'bg-primary-100 text-primary-700' : 'bg-neutral-100 text-neutral-700'
-              } hover:bg-primary-200`}
-            >
-              {isSpeaking ? <Volume2 className="h-5 w-5" /> : <VolumeX className="h-5 w-5" />}
-            </button>
-            
-            <button
               onClick={() => setShowChat(!showChat)}
               className={`p-2 rounded-full ${
                 showChat ? 'bg-primary-100 text-primary-700' : 'bg-neutral-100 text-neutral-700'
@@ -239,93 +215,66 @@ const Lesson: React.FC = () => {
         </div>
       </div>
 
-      {/* Topic Navigation */}
-      <div className="bg-primary-50 border-b border-primary-100">
-        <div className="container mx-auto px-4 py-3 flex justify-between items-center">
-          <button
-            onClick={() => navigateToTopic('prev')}
-            disabled={currentTopicIndex === 0}
-            className={`flex items-center text-sm font-medium ${
-              currentTopicIndex === 0 
-                ? 'text-neutral-400 cursor-not-allowed' 
-                : 'text-primary-600 hover:text-primary-700'
-            }`}
-          >
-            <ChevronLeft className="h-4 w-4 mr-1" />
-            Previous Topic
-          </button>
+      {/* Main Content */}
+      <div className="container mx-auto px-4 py-8">
+        <div className="max-w-5xl mx-auto">
+          <h1 className="text-3xl font-bold text-neutral-800 mb-8">{currentSection.title}</h1>
           
-          <h1 className="text-lg font-semibold text-primary-800">
-            {topics[currentTopicIndex]?.title || 'Loading...'}
-          </h1>
-          
-          <button
-            onClick={() => navigateToTopic('next')}
-            disabled={currentTopicIndex === topics.length - 1}
-            className={`flex items-center text-sm font-medium ${
-              currentTopicIndex === topics.length - 1
-                ? 'text-neutral-400 cursor-not-allowed'
-                : 'text-primary-600 hover:text-primary-700'
-            }`}
-          >
-            Next Topic
-            <ChevronRight className="h-4 w-4 ml-1" />
-          </button>
+          <div className="grid gap-8">
+            {/* Video Player */}
+            <VideoPlayer
+              videoUrl={currentSection.videoUrl}
+              captions={currentSection.captions}
+              onTimeUpdate={handleTimeUpdate}
+            />
+            
+            {/* Content and Transcript */}
+            <div className="grid md:grid-cols-2 gap-8">
+              <div className="prose max-w-none">
+                <h2 className="text-2xl font-semibold mb-4">Section Overview</h2>
+                <p className="text-neutral-700">{currentSection.content}</p>
+              </div>
+              
+              <Transcript
+                captions={currentSection.captions}
+                currentTime={currentTime}
+                onTimestampClick={handleTimestampClick}
+              />
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* Main Content */}
-      <div className="flex-grow flex">
-        {/* Tutorial Content */}
-        <div className="flex-1 p-6 overflow-y-auto">
-          <div className="max-w-4xl mx-auto">
-            <AnimatePresence mode="wait">
-              {sections.map((section, index) => (
-                <motion.div
-                  key={index}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -20 }}
-                  transition={{ duration: 0.3 }}
-                  className={`mb-8 p-6 rounded-lg ${
-                    index === currentSectionIndex
-                      ? 'bg-primary-50 border-2 border-primary-200'
-                      : 'bg-white border border-neutral-200'
-                  }`}
-                >
-                  <h2 className="text-2xl font-bold mb-4 text-neutral-900">{section.title}</h2>
-                  <div className="prose max-w-none mb-6">
-                    <p className="text-neutral-700">{section.content}</p>
-                  </div>
-                  
-                  {section.examples.length > 0 && (
-                    <div className="bg-white rounded-lg border border-neutral-200 p-4">
-                      <h3 className="text-lg font-semibold mb-3 text-neutral-800">Examples</h3>
-                      <div className="space-y-3">
-                        {section.examples.map((example, i) => (
-                          <div key={i} className="text-neutral-600">
-                            {example}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </motion.div>
-              ))}
-            </AnimatePresence>
-          </div>
-        </div>
+      {/* Quiz Modal */}
+      <AnimatePresence>
+        {showQuiz && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50"
+          >
+            <Quiz
+              question={currentSection.quiz.question}
+              options={currentSection.quiz.options}
+              correctAnswer={currentSection.quiz.correctAnswer}
+              onComplete={handleQuizComplete}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-        {/* Chat Panel */}
-        <AnimatePresence>
-          {showChat && (
-            <motion.div
-              initial={{ x: 384, opacity: 0 }}
-              animate={{ x: 0, opacity: 1 }}
-              exit={{ x: 384, opacity: 0 }}
-              transition={{ type: "spring", stiffness: 300, damping: 30 }}
-              className="w-96 bg-white border-l border-neutral-200 flex flex-col"
-            >
+      {/* Chat Panel */}
+      <AnimatePresence>
+        {showChat && (
+          <motion.div
+            initial={{ x: 384, opacity: 0 }}
+            animate={{ x: 0, opacity: 1 }}
+            exit={{ x: 384, opacity: 0 }}
+            transition={{ type: "spring", stiffness: 300, damping: 30 }}
+            className="fixed right-0 top-0 bottom-0 w-96 bg-white shadow-lg border-l border-neutral-200 z-40"
+          >
+            <div className="flex flex-col h-full">
               <div className="p-4 border-b border-neutral-200 flex justify-between items-center">
                 <h2 className="text-lg font-semibold">Questions & Answers</h2>
                 <button
@@ -377,10 +326,10 @@ const Lesson: React.FC = () => {
                   </button>
                 </div>
               </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };
