@@ -26,7 +26,7 @@ const Transcript: React.FC<TranscriptProps> = ({
   useEffect(() => {
     // Split captions into words with precise timestamps
     const allWords = captions.flatMap((caption) => {
-      const wordsInCaption = caption.text.split(' ');
+      const wordsInCaption = caption.text.split(/\s+/).filter(word => word.length > 0);
       const timePerWord = (caption.end - caption.start) / wordsInCaption.length;
       
       return wordsInCaption.map((word, wordIndex) => ({
@@ -76,7 +76,7 @@ const Transcript: React.FC<TranscriptProps> = ({
       <div className="space-y-4 max-h-[calc(100vh-24rem)] overflow-y-auto">
         {captions.map((caption, captionIndex) => {
           const isActive = currentTime >= caption.start && currentTime <= caption.end;
-          const words = caption.text.split(' ');
+          const words = caption.text.split(/\s+/).filter(word => word.length > 0);
           const timePerWord = (caption.end - caption.start) / words.length;
           
           return (
@@ -107,14 +107,16 @@ const Transcript: React.FC<TranscriptProps> = ({
                     const isWordActive = currentTime >= wordStart && currentTime < wordEnd;
                     
                     return (
-                      <span
-                        key={wordIndex}
-                        className={`inline-block transition-all duration-200 ${
-                          isWordActive ? 'bg-primary-200 text-primary-900 px-1 rounded' : ''
-                        }`}
-                      >
-                        {word}{' '}
-                      </span>
+                      <React.Fragment key={wordIndex}>
+                        <span
+                          className={`inline-block transition-all duration-200 ${
+                            isWordActive ? 'bg-primary-200 text-primary-900 px-1 rounded' : ''
+                          }`}
+                        >
+                          {word}
+                        </span>
+                        {' '}
+                      </React.Fragment>
                     );
                   })}
                 </div>

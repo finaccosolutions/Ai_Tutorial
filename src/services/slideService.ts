@@ -26,7 +26,9 @@ class SlideService {
   private currentSlideIndex: number = 0;
   private isPlaying: boolean = false;
   private isSpeakingEnabled: boolean = true;
-  private lastSpeakTime: number = 0;
+  private lastSlideChange: number = 0;
+  private MIN_SLIDE_INTERVAL = 500;
+  private MAX_RETRIES = 3;
 
   initialize(apiKey: string): void {
     if (!apiKey) {
@@ -39,6 +41,78 @@ class SlideService {
     } catch (error) {
       console.error('Failed to initialize Gemini API:', error);
       throw new Error('Failed to initialize Gemini API. Please check your API key.');
+    }
+  }
+
+  private sanitizeJsonResponse(text: string): string {
+    // Remove any markdown code block indicators
+    let sanitized = text.replace(/^```json\s*/g, '')
+                       .replace(/^```\s*/g, '')
+                       .replace(/\s*```$/g, '')
+                       .trim();
+    
+    // Remove any potential trailing commas before closing braces/brackets
+    sanitized = sanitized.replace(/,(\s*[}\]])/g, '$1');
+    
+    // Ensure proper JSON string escaping
+    sanitized = sanitized.replace(/(?<!\\)\\(?!["\\/bfnrtu])/g, '\\\\');
+    
+    return sanitized;
+  }
+
+  private validatePresentation(presentation: any): void {
+    if (!presentation || typeof presentation !== 'object') {
+      throw new Error('Invalid presentation format: not an object');
+    }
+
+    const requiredFields = ['title', 'description', 'slides'];
+    for (const field of requiredFields) {
+      if (!(field in presentation)) {
+        throw new Error(`Invalid presentation format: missing required field '${field}'`);
+      }
+    }
+
+    if (!Array.isArray(presentation.slides)) {
+      throw new Error('Invalid presentation format: slides must be an array');
+    }
+
+    if (presentation.slides.length === 0) {
+      throw new Error('Invalid presentation format: no slides provided');
+    }
+
+    for (const [index, slide] of presentation.slides.entries()) {
+      const slideRequiredFields = ['id', 'content', 'narration', 'duration'];
+      for (const field of slideRequiredFields) {
+        if (!(field in slide)) {
+          throw new Error(`Invalid slide format at index ${index}: missing required field '${field}'`);
+        }
+      }
+
+      if (typeof slide.duration !== 'number' || slide.duration < 0) {
+        throw new Error(`Invalid slide format at index ${index}: duration must be a positive number`);
+      }
+    }
+  }
+
+  private async retryGenerateContent(prompt: string, attempt = 1): Promise<any> {
+    try {
+      const result = await this.model.generateContent(prompt);
+      const response = await result.response;
+      const text = response.text();
+      
+      const sanitizedJson = this.sanitizeJsonResponse(text);
+      const parsed = JSON.parse(sanitizedJson);
+      
+      this.validatePresentation(parsed);
+      return parsed;
+    } catch (error) {
+      if (attempt < this.MAX_RETRIES) {
+        console.warn(`Attempt ${attempt} failed, retrying...`);
+        // Add exponential backoff delay
+        await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 1000));
+        return this.retryGenerateContent(prompt, attempt + 1);
+      }
+      throw error;
     }
   }
 
@@ -66,34 +140,9 @@ class SlideService {
 Create 5-7 slides with engaging, educational content. Each slide should have clear content with headers and bullet points (using markdown syntax within the content string), a conversational narration script, a relevant visual aid description, and a duration between 30-60 seconds.`;
 
     try {
-      const result = await this.model.generateContent(prompt);
-      const response = await result.response;
-      let text = response.text();
-      
-      text = text.replace(/^```json\s*/, '')
-                 .replace(/\s*```$/, '')
-                 .trim();
-      
-      let presentation;
-      try {
-        presentation = JSON.parse(text);
-      } catch (parseError) {
-        console.error('JSON Parse Error:', parseError);
-        console.debug('Failed JSON content:', text);
-        throw new Error('Failed to parse presentation content. The AI response was not in the correct format.');
-      }
+      const presentation = await this.retryGenerateContent(prompt);
 
-      if (!presentation.title || !presentation.description || !Array.isArray(presentation.slides)) {
-        throw new Error('Invalid presentation format: missing required fields');
-      }
-
-      for (const slide of presentation.slides) {
-        if (!slide.id || !slide.content || !slide.narration || !slide.duration) {
-          throw new Error('Invalid slide format: missing required fields');
-        }
-      }
-
-      presentation = {
+      const finalPresentation = {
         ...presentation,
         id: `presentation_${Date.now()}`,
         currentTime: 0,
@@ -103,10 +152,18 @@ Create 5-7 slides with engaging, educational content. Each slide should have cle
         )
       };
 
-      this.currentPresentation = presentation;
-      return presentation;
+      this.currentPresentation = finalPresentation;
+      return finalPresentation;
     } catch (error) {
       console.error('Error generating presentation:', error);
+      
+      // Provide more specific error messages
+      if (error instanceof SyntaxError) {
+        throw new Error('Failed to parse the AI response. Please try again.');
+      } else if (error instanceof Error && error.message.includes('Invalid presentation format')) {
+        throw new Error('The AI generated an invalid presentation structure. Please try again.');
+      }
+      
       throw new Error(
         error instanceof Error ? error.message : 'Failed to generate presentation. Please try again.'
       );
@@ -123,7 +180,7 @@ Create 5-7 slides with engaging, educational content. Each slide should have cle
     this.currentSlideIndex = 0;
     this.isPlaying = true;
     this.isSpeakingEnabled = isSpeakingEnabled;
-    this.lastSpeakTime = Date.now();
+    this.lastSlideChange = Date.now();
 
     const updatePresentation = () => {
       if (!this.isPlaying || !this.currentPresentation) return;
@@ -136,11 +193,14 @@ Create 5-7 slides with engaging, educational content. Each slide should have cle
         accumulatedDuration += this.currentPresentation.slides[i].duration;
       }
 
-      if (currentTime >= accumulatedDuration && this.currentSlideIndex < this.currentPresentation.slides.length - 1) {
+      const now = Date.now();
+      if (currentTime >= accumulatedDuration && 
+          this.currentSlideIndex < this.currentPresentation.slides.length - 1 &&
+          now - this.lastSlideChange >= this.MIN_SLIDE_INTERVAL) {
         this.currentSlideIndex++;
+        this.lastSlideChange = now;
         onSlideChange(this.currentSlideIndex);
         if (this.isSpeakingEnabled && this.isPlaying) {
-          this.lastSpeakTime = Date.now();
           speak(this.currentPresentation.slides[this.currentSlideIndex].narration);
         }
       }
@@ -149,7 +209,7 @@ Create 5-7 slides with engaging, educational content. Each slide should have cle
       this.playbackTimer = setTimeout(updatePresentation, 1000);
     };
 
-    if (this.isSpeakingEnabled) {
+    if (this.isSpeakingEnabled && presentation.slides.length > 0) {
       speak(presentation.slides[0].narration);
     }
     updatePresentation();
@@ -170,14 +230,17 @@ Create 5-7 slides with engaging, educational content. Each slide should have cle
     onSlideChange: (slideIndex: number) => void,
     onTimeUpdate: (currentTime: number) => void
   ): void {
-    if (!this.currentPresentation) return;
+    if (!this.currentPresentation || !this.currentPresentation.slides.length) return;
 
     this.isPlaying = true;
     
-    // Only start speaking if enough time has passed since the last speak
-    const timeSinceLastSpeak = Date.now() - this.lastSpeakTime;
-    if (this.isSpeakingEnabled && timeSinceLastSpeak > 500) {
-      this.lastSpeakTime = Date.now();
+    if (this.currentSlideIndex >= this.currentPresentation.slides.length) {
+      this.currentSlideIndex = this.currentPresentation.slides.length - 1;
+    }
+    
+    const now = Date.now();
+    if (this.isSpeakingEnabled && now - this.lastSlideChange >= this.MIN_SLIDE_INTERVAL) {
+      this.lastSlideChange = now;
       speak(this.currentPresentation.slides[this.currentSlideIndex].narration);
     }
     
@@ -192,11 +255,14 @@ Create 5-7 slides with engaging, educational content. Each slide should have cle
         accumulatedDuration += this.currentPresentation.slides[i].duration;
       }
 
-      if (currentTime >= accumulatedDuration && this.currentSlideIndex < this.currentPresentation.slides.length - 1) {
+      const now = Date.now();
+      if (currentTime >= accumulatedDuration && 
+          this.currentSlideIndex < this.currentPresentation.slides.length - 1 &&
+          now - this.lastSlideChange >= this.MIN_SLIDE_INTERVAL) {
         this.currentSlideIndex++;
+        this.lastSlideChange = now;
         onSlideChange(this.currentSlideIndex);
         if (this.isSpeakingEnabled && this.isPlaying) {
-          this.lastSpeakTime = Date.now();
           speak(this.currentPresentation.slides[this.currentSlideIndex].narration);
         }
       }
@@ -225,9 +291,9 @@ Create 5-7 slides with engaging, educational content. Each slide should have cle
     this.currentPresentation.currentTime = time;
     this.currentSlideIndex = slideIndex;
     
-    if (this.isPlaying && this.isSpeakingEnabled) {
-      this.lastSpeakTime = Date.now();
-      stopSpeaking();
+    const now = Date.now();
+    if (this.isPlaying && this.isSpeakingEnabled && now - this.lastSlideChange >= this.MIN_SLIDE_INTERVAL) {
+      this.lastSlideChange = now;
       speak(this.currentPresentation.slides[slideIndex].narration);
     }
     
@@ -239,8 +305,11 @@ Create 5-7 slides with engaging, educational content. Each slide should have cle
     if (!enabled) {
       stopSpeaking();
     } else if (this.isPlaying && this.currentPresentation) {
-      this.lastSpeakTime = Date.now();
-      speak(this.currentPresentation.slides[this.currentSlideIndex].narration);
+      const now = Date.now();
+      if (now - this.lastSlideChange >= this.MIN_SLIDE_INTERVAL) {
+        this.lastSlideChange = now;
+        speak(this.currentPresentation.slides[this.currentSlideIndex].narration);
+      }
     }
   }
 }
