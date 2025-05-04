@@ -48,21 +48,28 @@ class SlideService {
 
     const prompt = `
       Create an educational presentation about "${topic}" for ${level} level students.
-      Include visual descriptions and engaging content.
-      Format as JSON with:
+      Structure the content into 5-7 slides, each containing:
+      1. Clear, concise markdown content with headers, bullet points, and emphasis
+      2. A natural narration script that explains the content conversationally
+      3. A relevant visual aid description
+      4. Appropriate duration in seconds (30-60s per slide)
+
+      Format as JSON:
       {
-        "title": "Presentation title",
-        "description": "Brief overview",
+        "title": "Main presentation title",
+        "description": "Brief overview of the presentation",
         "slides": [
           {
-            "id": "unique_id",
-            "content": "Slide content in markdown",
-            "narration": "Natural speaking script",
-            "duration": seconds_for_slide,
-            "visualAid": "Description of visual aid or diagram"
+            "id": "slide_1",
+            "content": "# Slide Title\\n- Key point 1\\n- Key point 2",
+            "narration": "Natural speaking script for this slide",
+            "duration": 45,
+            "visualAid": "Description for relevant image"
           }
         ]
       }
+
+      Make the content engaging, educational, and well-structured.
     `;
 
     try {

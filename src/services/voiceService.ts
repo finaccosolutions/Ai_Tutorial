@@ -1,5 +1,7 @@
 // Voice service for text-to-speech and speech-to-text functionality
 
+let currentUtterance: SpeechSynthesisUtterance | null = null;
+
 // Text-to-speech function
 export const speak = (text: string, onEnd?: () => void, rate = 1, pitch = 1): SpeechSynthesisUtterance | null => {
   if (!window.speechSynthesis) {
@@ -8,10 +10,11 @@ export const speak = (text: string, onEnd?: () => void, rate = 1, pitch = 1): Sp
   }
 
   // Cancel any ongoing speech
-  window.speechSynthesis.cancel();
+  stopSpeaking();
 
   // Create utterance
   const utterance = new SpeechSynthesisUtterance(text);
+  currentUtterance = utterance;
   
   // Select voice (English female voice if available)
   const voices = window.speechSynthesis.getVoices();
@@ -30,7 +33,13 @@ export const speak = (text: string, onEnd?: () => void, rate = 1, pitch = 1): Sp
   
   // Event handlers
   utterance.onend = () => {
+    currentUtterance = null;
     if (onEnd) onEnd();
+  };
+
+  utterance.onerror = (event) => {
+    console.error('Speech synthesis error:', event);
+    currentUtterance = null;
   };
   
   // Start speaking
@@ -43,6 +52,7 @@ export const speak = (text: string, onEnd?: () => void, rate = 1, pitch = 1): Sp
 export const stopSpeaking = (): void => {
   if (window.speechSynthesis) {
     window.speechSynthesis.cancel();
+    currentUtterance = null;
   }
 };
 
@@ -53,7 +63,7 @@ export enum ListeningState {
   PROCESSING
 }
 
-// Mock speech recognition function (in a real app, use Web Speech API or a library)
+// Speech recognition function
 export const startListening = (
   onResult: (text: string) => void,
   onStateChange: (state: ListeningState) => void,

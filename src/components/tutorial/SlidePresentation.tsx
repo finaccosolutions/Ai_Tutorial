@@ -22,6 +22,7 @@ const SlidePresentation: React.FC<SlidePresentationProps> = ({
   const [duration, setDuration] = useState(0);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const imageRef = useRef<HTMLImageElement>(null);
 
   const currentSlide = presentation.slides[currentSlideIndex];
 
@@ -43,6 +44,17 @@ const SlidePresentation: React.FC<SlidePresentationProps> = ({
       document.removeEventListener('fullscreenchange', handleFullscreenChange);
     };
   }, []);
+
+  // Preload next slide's image
+  useEffect(() => {
+    if (currentSlideIndex < presentation.slides.length - 1) {
+      const nextSlide = presentation.slides[currentSlideIndex + 1];
+      if (nextSlide.visualAid) {
+        const img = new Image();
+        img.src = `https://source.unsplash.com/1600x900/?${encodeURIComponent(nextSlide.visualAid)}`;
+      }
+    }
+  }, [currentSlideIndex, presentation.slides]);
 
   const startPresentation = () => {
     setIsPlaying(true);
@@ -140,21 +152,28 @@ const SlidePresentation: React.FC<SlidePresentationProps> = ({
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -20 }}
             transition={{ duration: 0.5 }}
-            className="w-full h-full p-12 flex items-center justify-center"
+            className="w-full h-full p-12 flex flex-col items-center justify-center"
           >
-            <div className="prose prose-invert max-w-none">
+            <div className="prose prose-invert max-w-none w-full">
               <ReactMarkdown>{currentSlide.content}</ReactMarkdown>
-              {currentSlide.visualAid && (
-                <div className="mt-4 text-center">
-                  <img
-                    src={`https://source.unsplash.com/800x400/?${encodeURIComponent(currentSlide.visualAid)}`}
-                    alt={currentSlide.visualAid}
-                    className="rounded-lg mx-auto max-w-full h-auto"
-                    loading="eager"
-                  />
-                </div>
-              )}
             </div>
+            
+            {currentSlide.visualAid && (
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ delay: 0.3 }}
+                className="mt-8 w-full max-w-4xl mx-auto"
+              >
+                <img
+                  ref={imageRef}
+                  src={`https://source.unsplash.com/1600x900/?${encodeURIComponent(currentSlide.visualAid)}`}
+                  alt={currentSlide.visualAid}
+                  className="rounded-lg w-full h-auto object-cover shadow-lg"
+                  loading="eager"
+                />
+              </motion.div>
+            )}
           </motion.div>
         </AnimatePresence>
       </div>
