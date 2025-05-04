@@ -23,6 +23,9 @@ class SlideService {
   private model: any = null;
   private currentPresentation: SlidePresentation | null = null;
   private playbackTimer: NodeJS.Timeout | null = null;
+  private currentSlideIndex: number = 0;
+  private isPlaying: boolean = false;
+  private isSpeakingEnabled: boolean = true;
 
   initialize(apiKey: string): void {
     if (!apiKey) {
@@ -98,75 +101,104 @@ class SlideService {
     onSlideChange: (slideIndex: number) => void,
     onTimeUpdate: (currentTime: number) => void,
     isSpeakingEnabled: boolean
-  ): () => void {
+  ): void {
     this.currentPresentation = presentation;
-    let currentSlideIndex = 0;
-    let currentTime = 0;
-    let isPlaying = true;
+    this.currentSlideIndex = 0;
+    this.isPlaying = true;
+    this.isSpeakingEnabled = isSpeakingEnabled;
 
-    const updateTimer = () => {
-      if (!isPlaying) return;
+    const updatePresentation = () => {
+      if (!this.isPlaying || !this.currentPresentation) return;
 
-      this.playbackTimer = setInterval(() => {
-        currentTime++;
-        onTimeUpdate(currentTime);
+      const currentTime = this.currentPresentation.currentTime;
+      onTimeUpdate(currentTime);
 
-        const currentSlide = presentation.slides[currentSlideIndex];
-        if (currentTime >= currentSlide.duration) {
-          currentSlideIndex++;
-          if (currentSlideIndex < presentation.slides.length) {
-            onSlideChange(currentSlideIndex);
-            if (isSpeakingEnabled) {
-              speak(presentation.slides[currentSlideIndex].narration);
-            }
-          } else {
-            this.stopPresentation();
-          }
+      // Calculate accumulated duration up to current slide
+      let accumulatedDuration = 0;
+      for (let i = 0; i <= this.currentSlideIndex; i++) {
+        accumulatedDuration += this.currentPresentation.slides[i].duration;
+      }
+
+      // Check if we need to move to the next slide
+      if (currentTime >= accumulatedDuration && this.currentSlideIndex < this.currentPresentation.slides.length - 1) {
+        this.currentSlideIndex++;
+        onSlideChange(this.currentSlideIndex);
+        if (this.isSpeakingEnabled) {
+          speak(this.currentPresentation.slides[this.currentSlideIndex].narration);
         }
-      }, 1000);
+      }
+
+      this.currentPresentation.currentTime++;
+      this.playbackTimer = setTimeout(updatePresentation, 1000);
     };
 
     // Start presentation
-    if (isSpeakingEnabled) {
+    if (this.isSpeakingEnabled) {
       speak(presentation.slides[0].narration);
     }
-    updateTimer();
-
-    // Return cleanup function
-    return () => {
-      isPlaying = false;
-      if (this.playbackTimer) {
-        clearInterval(this.playbackTimer);
-      }
-      stopSpeaking();
-    };
+    updatePresentation();
   }
 
-  stopPresentation() {
+  stopPresentation(): void {
+    this.isPlaying = false;
     if (this.playbackTimer) {
-      clearInterval(this.playbackTimer);
+      clearTimeout(this.playbackTimer);
       this.playbackTimer = null;
     }
     stopSpeaking();
   }
 
-  seekTo(time: number): void {
+  resumePresentation(
+    onSlideChange: (slideIndex: number) => void,
+    onTimeUpdate: (currentTime: number) => void
+  ): void {
     if (!this.currentPresentation) return;
 
-    let slideIndex = 0;
-    let accumulatedTime = 0;
+    this.isPlaying = true;
+    if (this.isSpeakingEnabled) {
+      speak(this.currentPresentation.slides[this.currentSlideIndex].narration);
+    }
+    
+    this.startPresentation(
+      this.currentPresentation,
+      onSlideChange,
+      onTimeUpdate,
+      this.isSpeakingEnabled
+    );
+  }
 
-    // Find the correct slide based on time
+  seekTo(time: number): number {
+    if (!this.currentPresentation) return 0;
+
+    let accumulatedTime = 0;
+    let slideIndex = 0;
+
     for (let i = 0; i < this.currentPresentation.slides.length; i++) {
       accumulatedTime += this.currentPresentation.slides[i].duration;
-      if (accumulatedTime > time) {
+      if (time < accumulatedTime) {
         slideIndex = i;
         break;
       }
     }
 
     this.currentPresentation.currentTime = time;
+    this.currentSlideIndex = slideIndex;
+    
+    if (this.isPlaying && this.isSpeakingEnabled) {
+      stopSpeaking();
+      speak(this.currentPresentation.slides[slideIndex].narration);
+    }
+    
     return slideIndex;
+  }
+
+  setIsSpeakingEnabled(enabled: boolean): void {
+    this.isSpeakingEnabled = enabled;
+    if (!enabled) {
+      stopSpeaking();
+    } else if (this.isPlaying && this.currentPresentation) {
+      speak(this.currentPresentation.slides[this.currentSlideIndex].narration);
+    }
   }
 }
 
