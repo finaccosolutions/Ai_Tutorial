@@ -6,18 +6,23 @@ export interface Slide {
   content: string;
   narration: string;
   duration: number;
+  visualAid?: string;
 }
 
 export interface SlidePresentation {
   id: string;
   title: string;
+  description: string;
   slides: Slide[];
   totalDuration: number;
+  currentTime: number;
 }
 
 class SlideService {
   private genAI: GoogleGenerativeAI | null = null;
   private model: any = null;
+  private currentPresentation: SlidePresentation | null = null;
+  private playbackTimer: NodeJS.Timeout | null = null;
 
   initialize(apiKey: string): void {
     if (!apiKey) {
@@ -38,35 +43,23 @@ class SlideService {
       throw new Error('Gemini API not initialized. Please set API key first.');
     }
 
-    if (!topic || !level) {
-      throw new Error('Topic and level are required to generate a presentation.');
-    }
-
     const prompt = `
       Create an educational presentation about "${topic}" for ${level} level students.
-      Respond with ONLY the following JSON structure, no markdown formatting or backticks:
+      Include visual descriptions and engaging content.
+      Format as JSON with:
       {
         "title": "Presentation title",
+        "description": "Brief overview",
         "slides": [
           {
             "id": "unique_id",
-            "content": "Slide content in markdown format",
-            "narration": "Natural speaking script for this slide",
-            "duration": estimated_duration_in_seconds
+            "content": "Slide content in markdown",
+            "narration": "Natural speaking script",
+            "duration": seconds_for_slide,
+            "visualAid": "Description of visual aid or diagram"
           }
         ]
       }
-      
-      Guidelines:
-      - Include 5-7 slides
-      - Start with an introduction
-      - Each slide should focus on one key concept
-      - Use clear, concise language
-      - Include examples where appropriate
-      - End with a summary
-      - Keep narration conversational and engaging
-      - Use markdown formatting in content
-      - Keep each narration around 30-60 seconds
     `;
 
     try {
@@ -74,118 +67,106 @@ class SlideService {
       const response = await result.response;
       const text = response.text();
       
-      // Clean the response text by removing any markdown formatting
       const cleanedText = text
-        .replace(/```json\s*/g, '')  // Remove ```json
-        .replace(/```\s*/g, '')      // Remove remaining ```
-        .trim();                     // Remove any extra whitespace
+        .replace(/```json\s*/g, '')
+        .replace(/```\s*/g, '')
+        .trim();
       
-      let presentation;
-      try {
-        presentation = JSON.parse(cleanedText);
-      } catch (parseError) {
-        console.error('Failed to parse Gemini response:', parseError);
-        console.error('Raw response:', text);
-        console.error('Cleaned response:', cleanedText);
-        throw new Error('Failed to parse AI response. The response format was invalid. Please try again.');
-      }
+      let presentation = JSON.parse(cleanedText);
 
-      // Validate the presentation structure
-      if (!presentation.title || !Array.isArray(presentation.slides) || presentation.slides.length === 0) {
-        throw new Error('Invalid presentation structure received from AI. Missing required fields.');
-      }
-
-      // Ensure each slide has required properties
-      presentation.slides = presentation.slides.map((slide: any, index: number) => ({
-        id: slide.id || `slide_${index + 1}`,
-        content: slide.content || 'Content not available',
-        narration: slide.narration || 'Narration not available',
-        duration: slide.duration || 30
-      }));
-      
-      // Calculate total duration
-      const totalDuration = presentation.slides.reduce(
-        (total: number, slide: Slide) => total + slide.duration,
-        0
-      );
-
-      return {
+      // Add required fields and validate
+      presentation = {
         ...presentation,
         id: `presentation_${Date.now()}`,
-        totalDuration
+        currentTime: 0,
+        totalDuration: presentation.slides.reduce(
+          (total: number, slide: Slide) => total + slide.duration,
+          0
+        )
       };
-    } catch (error: any) {
+
+      this.currentPresentation = presentation;
+      return presentation;
+    } catch (error) {
       console.error('Error generating presentation:', error);
-      if (error.message.includes('API key')) {
-        throw new Error('Invalid or expired API key. Please check your Gemini API key.');
-      }
-      throw error; // Propagate the specific error message instead of a generic one
+      throw new Error('Failed to generate presentation. Please try again.');
     }
   }
 
   startPresentation(
-    presentation: SlidePresentation, 
+    presentation: SlidePresentation,
     onSlideChange: (slideIndex: number) => void,
+    onTimeUpdate: (currentTime: number) => void,
     isSpeakingEnabled: boolean
-  ) {
-    if (!presentation || !presentation.slides || presentation.slides.length === 0) {
-      throw new Error('Invalid presentation data.');
-    }
-
+  ): () => void {
+    this.currentPresentation = presentation;
     let currentSlideIndex = 0;
+    let currentTime = 0;
     let isPlaying = true;
-    
-    const playSlide = async (index: number) => {
-      if (!isPlaying || index >= presentation.slides.length) {
-        return;
-      }
-      
-      const slide = presentation.slides[index];
-      onSlideChange(index);
-      
-      if (isSpeakingEnabled && slide.narration) {
-        try {
-          await speak(slide.narration, () => {
-            if (isPlaying) {
-              currentSlideIndex++;
-              if (currentSlideIndex < presentation.slides.length) {
-                playSlide(currentSlideIndex);
-              }
+
+    const updateTimer = () => {
+      if (!isPlaying) return;
+
+      this.playbackTimer = setInterval(() => {
+        currentTime++;
+        onTimeUpdate(currentTime);
+
+        const currentSlide = presentation.slides[currentSlideIndex];
+        if (currentTime >= currentSlide.duration) {
+          currentSlideIndex++;
+          if (currentSlideIndex < presentation.slides.length) {
+            onSlideChange(currentSlideIndex);
+            if (isSpeakingEnabled) {
+              speak(presentation.slides[currentSlideIndex].narration);
             }
-          });
-        } catch (error) {
-          console.error('Error playing narration:', error);
-          if (isPlaying) {
-            currentSlideIndex++;
-            if (currentSlideIndex < presentation.slides.length) {
-              playSlide(currentSlideIndex);
-            }
+          } else {
+            this.stopPresentation();
           }
         }
-      } else {
-        setTimeout(() => {
-          if (isPlaying) {
-            currentSlideIndex++;
-            if (currentSlideIndex < presentation.slides.length) {
-              playSlide(currentSlideIndex);
-            }
-          }
-        }, slide.duration * 1000);
-      }
+      }, 1000);
     };
 
-    // Start with first slide
-    playSlide(0);
+    // Start presentation
+    if (isSpeakingEnabled) {
+      speak(presentation.slides[0].narration);
+    }
+    updateTimer();
 
-    // Return a function to stop the presentation
+    // Return cleanup function
     return () => {
       isPlaying = false;
+      if (this.playbackTimer) {
+        clearInterval(this.playbackTimer);
+      }
       stopSpeaking();
     };
   }
 
   stopPresentation() {
+    if (this.playbackTimer) {
+      clearInterval(this.playbackTimer);
+      this.playbackTimer = null;
+    }
     stopSpeaking();
+  }
+
+  seekTo(time: number): void {
+    if (!this.currentPresentation) return;
+
+    let slideIndex = 0;
+    let accumulatedTime = 0;
+
+    // Find the correct slide based on time
+    for (let i = 0; i < this.currentPresentation.slides.length; i++) {
+      accumulatedTime += this.currentPresentation.slides[i].duration;
+      if (accumulatedTime > time) {
+        slideIndex = i;
+        break;
+      }
+    }
+
+    this.currentPresentation.currentTime = time;
+    return slideIndex;
   }
 }
 

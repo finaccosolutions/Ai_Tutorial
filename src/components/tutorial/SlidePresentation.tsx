@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Play, Pause, SkipBack, SkipForward } from 'lucide-react';
+import { Play, Pause, SkipBack, SkipForward, Volume2, VolumeX } from 'lucide-react';
 import type { SlidePresentation } from '../../services/slideService';
 import slideService from '../../services/slideService';
 import ReactMarkdown from 'react-markdown';
@@ -8,19 +8,26 @@ import ReactMarkdown from 'react-markdown';
 interface SlidePresentationProps {
   presentation: SlidePresentation;
   isSpeakingEnabled: boolean;
+  onTimeUpdate?: (time: number) => void;
 }
 
-const SlidePresentation: React.FC<SlidePresentationProps> = ({ 
+const SlidePresentation: React.FC<SlidePresentationProps> = ({
   presentation,
-  isSpeakingEnabled
+  isSpeakingEnabled,
+  onTimeUpdate
 }) => {
   const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
 
   const currentSlide = presentation.slides[currentSlideIndex];
 
   useEffect(() => {
-    // Stop presentation when speaking is disabled
+    setDuration(presentation.totalDuration);
+  }, [presentation]);
+
+  useEffect(() => {
     if (!isSpeakingEnabled && isPlaying) {
       stopPresentation();
     }
@@ -28,9 +35,15 @@ const SlidePresentation: React.FC<SlidePresentationProps> = ({
 
   const startPresentation = () => {
     setIsPlaying(true);
-    slideService.startPresentation(presentation, (index) => {
-      setCurrentSlideIndex(index);
-    }, isSpeakingEnabled);
+    slideService.startPresentation(
+      presentation,
+      (index) => setCurrentSlideIndex(index),
+      (time) => {
+        setCurrentTime(time);
+        onTimeUpdate?.(time);
+      },
+      isSpeakingEnabled
+    );
   };
 
   const stopPresentation = () => {
@@ -60,6 +73,21 @@ const SlidePresentation: React.FC<SlidePresentationProps> = ({
     }
   };
 
+  const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const time = parseInt(e.target.value);
+    setCurrentTime(time);
+    const newSlideIndex = slideService.seekTo(time);
+    if (typeof newSlideIndex === 'number') {
+      setCurrentSlideIndex(newSlideIndex);
+    }
+  };
+
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
   return (
     <div className="bg-white rounded-lg shadow-lg overflow-hidden">
       {/* Slide Content */}
@@ -75,6 +103,15 @@ const SlidePresentation: React.FC<SlidePresentationProps> = ({
           >
             <div className="prose prose-invert max-w-none">
               <ReactMarkdown>{currentSlide.content}</ReactMarkdown>
+              {currentSlide.visualAid && (
+                <div className="mt-4 text-center">
+                  <img
+                    src={`https://source.unsplash.com/800x400/?${encodeURIComponent(currentSlide.visualAid)}`}
+                    alt={currentSlide.visualAid}
+                    className="rounded-lg mx-auto"
+                  />
+                </div>
+              )}
             </div>
           </motion.div>
         </AnimatePresence>
@@ -82,6 +119,20 @@ const SlidePresentation: React.FC<SlidePresentationProps> = ({
 
       {/* Controls */}
       <div className="p-4 bg-white border-t border-neutral-200">
+        {/* Progress bar */}
+        <div className="flex items-center gap-2 mb-4">
+          <span className="text-sm text-neutral-600">{formatTime(currentTime)}</span>
+          <input
+            type="range"
+            min="0"
+            max={duration}
+            value={currentTime}
+            onChange={handleSeek}
+            className="flex-grow h-1 bg-neutral-200 rounded-full appearance-none cursor-pointer"
+          />
+          <span className="text-sm text-neutral-600">{formatTime(duration)}</span>
+        </div>
+
         <div className="flex items-center justify-between">
           {/* Progress */}
           <div className="text-sm text-neutral-600">
@@ -125,7 +176,7 @@ const SlidePresentation: React.FC<SlidePresentationProps> = ({
 
           {/* Duration */}
           <div className="text-sm text-neutral-600">
-            {Math.floor(currentSlide.duration / 60)}:{(currentSlide.duration % 60).toString().padStart(2, '0')}
+            {formatTime(currentSlide.duration)}
           </div>
         </div>
       </div>

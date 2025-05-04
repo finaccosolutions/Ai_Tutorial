@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { motion } from 'framer-motion';
-import { MessageSquare, ArrowLeft, Volume2, VolumeX } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { MessageSquare, ArrowLeft, Volume2, VolumeX, Play, Pause, X } from 'lucide-react';
 import { useUserPreferences } from '../contexts/UserPreferencesContext';
 import { useAuth } from '../contexts/AuthContext';
 import geminiService from '../services/geminiService';
 import slideService from '../services/slideService';
 import SlidePresentation from '../components/tutorial/SlidePresentation';
 import type { SlidePresentation as SlidePresentationType } from '../services/slideService';
+import { speak, stopSpeaking } from '../services/voiceService';
 
 const Lesson: React.FC = () => {
   const { lessonId } = useParams<{ lessonId: string }>();
@@ -23,6 +24,9 @@ const Lesson: React.FC = () => {
   const [answer, setAnswer] = useState<string | null>(null);
   const [isAnswering, setIsAnswering] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(true);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
+  const [tutorialPaused, setTutorialPaused] = useState(false);
 
   useEffect(() => {
     const validateRequirements = () => {
@@ -46,10 +50,8 @@ const Lesson: React.FC = () => {
       try {
         validateRequirements();
         
-        // Initialize the slide service with the API key
         slideService.initialize(geminiApiKey);
         
-        // Generate the presentation
         const generatedPresentation = await slideService.generateSlidePresentation(
           preferences.subject,
           preferences.knowledgeLevel
@@ -67,11 +69,50 @@ const Lesson: React.FC = () => {
     loadPresentation();
   }, [lessonId, preferences, geminiApiKey]);
 
+  const togglePlayback = () => {
+    if (isPlaying) {
+      stopPresentation();
+    } else {
+      startPresentation();
+    }
+  };
+
+  const startPresentation = () => {
+    if (!presentation) return;
+    setIsPlaying(true);
+    setTutorialPaused(false);
+    
+    if (isSpeaking) {
+      speak(presentation.slides[currentSlideIndex].narration, () => {
+        if (currentSlideIndex < presentation.slides.length - 1) {
+          setCurrentSlideIndex(prev => prev + 1);
+        } else {
+          stopPresentation();
+        }
+      });
+    }
+  };
+
+  const stopPresentation = () => {
+    setIsPlaying(false);
+    stopSpeaking();
+  };
+
+  const toggleVoice = () => {
+    setIsSpeaking(!isSpeaking);
+    if (isSpeaking) {
+      stopSpeaking();
+    }
+  };
+
   const handleAskQuestion = async () => {
     if (!question.trim() || !preferences?.subject || !preferences?.knowledgeLevel) return;
     
+    setTutorialPaused(true);
+    stopPresentation();
     setIsAnswering(true);
     setAnswer(null);
+
     try {
       const response = await geminiService.answerQuestion(
         question,
@@ -87,11 +128,10 @@ const Lesson: React.FC = () => {
     }
   };
 
-  const toggleVoice = () => {
-    setIsSpeaking(!isSpeaking);
-    if (!isSpeaking) {
-      slideService.stopPresentation();
-    }
+  const resumeTutorial = () => {
+    setTutorialPaused(false);
+    setShowChat(false);
+    startPresentation();
   };
 
   if (isLoading) {
@@ -176,78 +216,140 @@ const Lesson: React.FC = () => {
           <h1 className="text-3xl font-bold text-neutral-800 mb-8">{presentation.title}</h1>
           
           <div className="space-y-8">
-            <SlidePresentation 
-              presentation={presentation}
-              isSpeakingEnabled={isSpeaking}
-            />
+            <div className="bg-white rounded-lg shadow-lg overflow-hidden">
+              {/* Slide Content */}
+              <div className="relative aspect-video bg-neutral-900 flex items-center justify-center">
+                <AnimatePresence mode="wait">
+                  <motion.div
+                    key={presentation.slides[currentSlideIndex].id}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -20 }}
+                    transition={{ duration: 0.5 }}
+                    className="w-full h-full p-12 flex items-center justify-center"
+                  >
+                    <div className="prose prose-invert max-w-none">
+                      {presentation.slides[currentSlideIndex].content}
+                    </div>
+                  </motion.div>
+                </AnimatePresence>
+              </div>
+
+              {/* Controls */}
+              <div className="p-4 bg-white border-t border-neutral-200">
+                <div className="flex items-center justify-between">
+                  {/* Progress */}
+                  <div className="text-sm text-neutral-600">
+                    Slide {currentSlideIndex + 1} of {presentation.slides.length}
+                  </div>
+
+                  {/* Control Buttons */}
+                  <div className="flex items-center space-x-4">
+                    <button
+                      onClick={togglePlayback}
+                      disabled={!isSpeaking}
+                      className={`p-3 rounded-full ${
+                        isSpeaking 
+                          ? 'bg-primary-600 text-white hover:bg-primary-700' 
+                          : 'bg-neutral-200 text-neutral-500 cursor-not-allowed'
+                      }`}
+                    >
+                      {isPlaying ? (
+                        <Pause className="w-6 h-6" />
+                      ) : (
+                        <Play className="w-6 h-6" />
+                      )}
+                    </button>
+                  </div>
+
+                  {/* Duration */}
+                  <div className="text-sm text-neutral-600">
+                    {Math.floor(presentation.slides[currentSlideIndex].duration / 60)}:
+                    {(presentation.slides[currentSlideIndex].duration % 60).toString().padStart(2, '0')}
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
 
       {/* Chat Panel */}
-      {showChat && (
-        <motion.div
-          initial={{ x: 384, opacity: 0 }}
-          animate={{ x: 0, opacity: 1 }}
-          exit={{ x: 384, opacity: 0 }}
-          transition={{ type: "spring", stiffness: 300, damping: 30 }}
-          className="fixed right-0 top-0 bottom-0 w-96 bg-white shadow-lg border-l border-neutral-200 z-40"
-        >
-          <div className="flex flex-col h-full">
-            <div className="p-4 border-b border-neutral-200 flex justify-between items-center">
-              <h2 className="text-lg font-semibold">Questions & Answers</h2>
-              <button
-                onClick={() => setShowChat(false)}
-                className="text-neutral-500 hover:text-neutral-700"
-              >
-                ×
-              </button>
-            </div>
-
-            <div className="flex-1 overflow-y-auto p-4">
-              {answer && (
-                <div className="mb-4">
-                  <div className="bg-neutral-100 rounded-lg p-3 mb-2">
-                    <p className="text-neutral-800">{question}</p>
-                  </div>
-                  <div className="bg-primary-50 rounded-lg p-3 ml-4">
-                    <p className="text-primary-800">{answer}</p>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <div className="p-4 border-t border-neutral-200">
-              <div className="flex space-x-2">
-                <input
-                  type="text"
-                  value={question}
-                  onChange={(e) => setQuestion(e.target.value)}
-                  placeholder="Ask a question..."
-                  className="flex-1 px-4 py-2 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                      e.preventDefault();
-                      handleAskQuestion();
-                    }
-                  }}
-                />
+      <AnimatePresence>
+        {showChat && (
+          <motion.div
+            initial={{ x: 384, opacity: 0 }}
+            animate={{ x: 0, opacity: 1 }}
+            exit={{ x: 384, opacity: 0 }}
+            transition={{ type: "spring", stiffness: 300, damping: 30 }}
+            className="fixed right-0 top-0 bottom-0 w-96 bg-white shadow-lg border-l border-neutral-200 z-40"
+          >
+            <div className="flex flex-col h-full">
+              <div className="p-4 border-b border-neutral-200 flex justify-between items-center">
+                <h2 className="text-lg font-semibold">Questions & Answers</h2>
                 <button
-                  onClick={handleAskQuestion}
-                  disabled={isAnswering || !question.trim()}
-                  className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  onClick={() => setShowChat(false)}
+                  className="text-neutral-500 hover:text-neutral-700"
                 >
-                  {isAnswering ? (
-                    <div className="h-5 w-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                  ) : (
-                    'Send'
-                  )}
+                  <X className="h-5 w-5" />
                 </button>
               </div>
+
+              <div className="flex-1 overflow-y-auto p-4">
+                {answer && (
+                  <div className="mb-4">
+                    <div className="bg-neutral-100 rounded-lg p-3 mb-2">
+                      <p className="text-neutral-800">{question}</p>
+                    </div>
+                    <div className="bg-primary-50 rounded-lg p-3 ml-4">
+                      <p className="text-primary-800">{answer}</p>
+                    </div>
+                    {tutorialPaused && (
+                      <div className="mt-4 text-center">
+                        <button
+                          onClick={resumeTutorial}
+                          className="btn btn-primary"
+                        >
+                          Resume Tutorial
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <div className="p-4 border-t border-neutral-200">
+                <div className="flex space-x-2">
+                  <input
+                    type="text"
+                    value={question}
+                    onChange={(e) => setQuestion(e.target.value)}
+                    placeholder="Ask a question..."
+                    className="flex-1 px-4 py-2 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        handleAskQuestion();
+                      }
+                    }}
+                  />
+                  <button
+                    onClick={handleAskQuestion}
+                    disabled={isAnswering || !question.trim()}
+                    className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isAnswering ? (
+                      <div className="h-5 w-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    ) : (
+                      'Send'
+                    )}
+                  </button>
+                </div>
+              </div>
             </div>
-          </div>
-        </motion.div>
-      )}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };
