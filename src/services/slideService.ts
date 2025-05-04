@@ -20,9 +20,13 @@ class SlideService {
   private model: any = null;
 
   initialize(apiKey: string): void {
+    if (!apiKey) {
+      throw new Error('API key is required to initialize Gemini API.');
+    }
+
     try {
       this.genAI = new GoogleGenerativeAI(apiKey);
-      this.model = this.genAI.getGenerativeModel({ model: 'gemini-pro' });
+      this.model = this.genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
     } catch (error) {
       console.error('Failed to initialize Gemini API:', error);
       throw new Error('Failed to initialize Gemini API. Please check your API key.');
@@ -34,9 +38,13 @@ class SlideService {
       throw new Error('Gemini API not initialized. Please set API key first.');
     }
 
+    if (!topic || !level) {
+      throw new Error('Topic and level are required to generate a presentation.');
+    }
+
     const prompt = `
       Create an educational presentation about "${topic}" for ${level} level students.
-      Format as JSON with the following structure:
+      Respond with ONLY the following JSON structure, no markdown formatting or backticks:
       {
         "title": "Presentation title",
         "slides": [
@@ -57,6 +65,8 @@ class SlideService {
       - Include examples where appropriate
       - End with a summary
       - Keep narration conversational and engaging
+      - Use markdown formatting in content
+      - Keep each narration around 30-60 seconds
     `;
 
     try {
@@ -64,8 +74,34 @@ class SlideService {
       const response = await result.response;
       const text = response.text();
       
-      // Parse the JSON response
-      const presentation = JSON.parse(text);
+      // Clean the response text by removing any markdown formatting
+      const cleanedText = text
+        .replace(/```json\s*/g, '')  // Remove ```json
+        .replace(/```\s*/g, '')      // Remove remaining ```
+        .trim();                     // Remove any extra whitespace
+      
+      let presentation;
+      try {
+        presentation = JSON.parse(cleanedText);
+      } catch (parseError) {
+        console.error('Failed to parse Gemini response:', parseError);
+        console.error('Raw response:', text);
+        console.error('Cleaned response:', cleanedText);
+        throw new Error('Failed to parse AI response. The response format was invalid. Please try again.');
+      }
+
+      // Validate the presentation structure
+      if (!presentation.title || !Array.isArray(presentation.slides) || presentation.slides.length === 0) {
+        throw new Error('Invalid presentation structure received from AI. Missing required fields.');
+      }
+
+      // Ensure each slide has required properties
+      presentation.slides = presentation.slides.map((slide: any, index: number) => ({
+        id: slide.id || `slide_${index + 1}`,
+        content: slide.content || 'Content not available',
+        narration: slide.narration || 'Narration not available',
+        duration: slide.duration || 30
+      }));
       
       // Calculate total duration
       const totalDuration = presentation.slides.reduce(
@@ -75,37 +111,77 @@ class SlideService {
 
       return {
         ...presentation,
+        id: `presentation_${Date.now()}`,
         totalDuration
       };
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error generating presentation:', error);
-      throw new Error('Failed to generate presentation. Please try again.');
+      if (error.message.includes('API key')) {
+        throw new Error('Invalid or expired API key. Please check your Gemini API key.');
+      }
+      throw error; // Propagate the specific error message instead of a generic one
     }
   }
 
-  startPresentation(presentation: SlidePresentation, onSlideChange: (slideIndex: number) => void) {
+  startPresentation(
+    presentation: SlidePresentation, 
+    onSlideChange: (slideIndex: number) => void,
+    isSpeakingEnabled: boolean
+  ) {
+    if (!presentation || !presentation.slides || presentation.slides.length === 0) {
+      throw new Error('Invalid presentation data.');
+    }
+
     let currentSlideIndex = 0;
+    let isPlaying = true;
     
     const playSlide = async (index: number) => {
-      if (index >= presentation.slides.length) {
+      if (!isPlaying || index >= presentation.slides.length) {
         return;
       }
       
       const slide = presentation.slides[index];
       onSlideChange(index);
       
-      // Start narration
-      speak(slide.narration, () => {
-        // When narration ends, move to next slide
-        currentSlideIndex++;
-        if (currentSlideIndex < presentation.slides.length) {
-          playSlide(currentSlideIndex);
+      if (isSpeakingEnabled && slide.narration) {
+        try {
+          await speak(slide.narration, () => {
+            if (isPlaying) {
+              currentSlideIndex++;
+              if (currentSlideIndex < presentation.slides.length) {
+                playSlide(currentSlideIndex);
+              }
+            }
+          });
+        } catch (error) {
+          console.error('Error playing narration:', error);
+          if (isPlaying) {
+            currentSlideIndex++;
+            if (currentSlideIndex < presentation.slides.length) {
+              playSlide(currentSlideIndex);
+            }
+          }
         }
-      });
+      } else {
+        setTimeout(() => {
+          if (isPlaying) {
+            currentSlideIndex++;
+            if (currentSlideIndex < presentation.slides.length) {
+              playSlide(currentSlideIndex);
+            }
+          }
+        }, slide.duration * 1000);
+      }
     };
 
     // Start with first slide
     playSlide(0);
+
+    // Return a function to stop the presentation
+    return () => {
+      isPlaying = false;
+      stopSpeaking();
+    };
   }
 
   stopPresentation() {

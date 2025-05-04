@@ -1,17 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
-import { MessageSquare, ArrowLeft, Send, X, Volume2, VolumeX } from 'lucide-react';
+import { motion } from 'framer-motion';
+import { MessageSquare, ArrowLeft, Volume2, VolumeX } from 'lucide-react';
 import { useUserPreferences } from '../contexts/UserPreferencesContext';
 import { useAuth } from '../contexts/AuthContext';
 import geminiService from '../services/geminiService';
 import slideService from '../services/slideService';
-import { speak, stopSpeaking } from '../services/voiceService';
 import SlidePresentation from '../components/tutorial/SlidePresentation';
 import type { SlidePresentation as SlidePresentationType } from '../services/slideService';
 
 const Lesson: React.FC = () => {
-  const { topicId } = useParams<{ topicId: string }>();
+  const { lessonId } = useParams<{ lessonId: string }>();
   const { preferences } = useUserPreferences();
   const { geminiApiKey } = useAuth();
   const navigate = useNavigate();
@@ -23,23 +22,39 @@ const Lesson: React.FC = () => {
   const [question, setQuestion] = useState('');
   const [answer, setAnswer] = useState<string | null>(null);
   const [isAnswering, setIsAnswering] = useState(false);
-  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState(true);
 
   useEffect(() => {
-    if (!topicId || !preferences?.subject || !preferences?.knowledgeLevel || !geminiApiKey) {
-      setError('Missing required information to load the tutorial.');
-      return;
-    }
+    const validateRequirements = () => {
+      if (!lessonId) {
+        throw new Error('Lesson ID is required.');
+      }
+      if (!preferences?.subject) {
+        throw new Error('Subject preference is not set. Please complete onboarding.');
+      }
+      if (!preferences?.knowledgeLevel) {
+        throw new Error('Knowledge level is not set. Please complete onboarding.');
+      }
+      if (!geminiApiKey) {
+        throw new Error('Gemini API key is not set. Please add your API key in settings.');
+      }
+    };
     
     const loadPresentation = async () => {
       setIsLoading(true);
       setError(null);
       try {
+        validateRequirements();
+        
+        // Initialize the slide service with the API key
         slideService.initialize(geminiApiKey);
+        
+        // Generate the presentation
         const generatedPresentation = await slideService.generateSlidePresentation(
           preferences.subject,
           preferences.knowledgeLevel
         );
+        
         setPresentation(generatedPresentation);
       } catch (error: any) {
         console.error('Error loading presentation:', error);
@@ -50,7 +65,7 @@ const Lesson: React.FC = () => {
     };
 
     loadPresentation();
-  }, [topicId, preferences, geminiApiKey]);
+  }, [lessonId, preferences, geminiApiKey]);
 
   const handleAskQuestion = async () => {
     if (!question.trim() || !preferences?.subject || !preferences?.knowledgeLevel) return;
@@ -64,11 +79,6 @@ const Lesson: React.FC = () => {
         preferences.knowledgeLevel
       );
       setAnswer(response);
-      
-      // Speak the answer if voice is enabled
-      if (isSpeaking) {
-        speak(response);
-      }
     } catch (error: any) {
       console.error('Error getting answer:', error);
       setAnswer(error.message || 'Sorry, I couldn\'t process your question. Please try again.');
@@ -79,8 +89,8 @@ const Lesson: React.FC = () => {
 
   const toggleVoice = () => {
     setIsSpeaking(!isSpeaking);
-    if (isSpeaking) {
-      stopSpeaking();
+    if (!isSpeaking) {
+      slideService.stopPresentation();
     }
   };
 
@@ -104,9 +114,7 @@ const Lesson: React.FC = () => {
     return (
       <div className="min-h-screen bg-neutral-50 flex items-center justify-center">
         <div className="text-center max-w-lg px-4">
-          <div className="text-red-500 mb-4">
-            <X className="h-12 w-12 mx-auto" />
-          </div>
+          <div className="text-error-500 mb-4">⚠️</div>
           <h2 className="text-2xl font-semibold text-neutral-800 mb-4">Unable to Load Tutorial</h2>
           <p className="text-neutral-600 mb-6">{error}</p>
           <button
@@ -168,77 +176,78 @@ const Lesson: React.FC = () => {
           <h1 className="text-3xl font-bold text-neutral-800 mb-8">{presentation.title}</h1>
           
           <div className="space-y-8">
-            <SlidePresentation presentation={presentation} />
+            <SlidePresentation 
+              presentation={presentation}
+              isSpeakingEnabled={isSpeaking}
+            />
           </div>
         </div>
       </div>
 
       {/* Chat Panel */}
-      <AnimatePresence>
-        {showChat && (
-          <motion.div
-            initial={{ x: 384, opacity: 0 }}
-            animate={{ x: 0, opacity: 1 }}
-            exit={{ x: 384, opacity: 0 }}
-            transition={{ type: "spring", stiffness: 300, damping: 30 }}
-            className="fixed right-0 top-0 bottom-0 w-96 bg-white shadow-lg border-l border-neutral-200 z-40"
-          >
-            <div className="flex flex-col h-full">
-              <div className="p-4 border-b border-neutral-200 flex justify-between items-center">
-                <h2 className="text-lg font-semibold">Questions & Answers</h2>
+      {showChat && (
+        <motion.div
+          initial={{ x: 384, opacity: 0 }}
+          animate={{ x: 0, opacity: 1 }}
+          exit={{ x: 384, opacity: 0 }}
+          transition={{ type: "spring", stiffness: 300, damping: 30 }}
+          className="fixed right-0 top-0 bottom-0 w-96 bg-white shadow-lg border-l border-neutral-200 z-40"
+        >
+          <div className="flex flex-col h-full">
+            <div className="p-4 border-b border-neutral-200 flex justify-between items-center">
+              <h2 className="text-lg font-semibold">Questions & Answers</h2>
+              <button
+                onClick={() => setShowChat(false)}
+                className="text-neutral-500 hover:text-neutral-700"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4">
+              {answer && (
+                <div className="mb-4">
+                  <div className="bg-neutral-100 rounded-lg p-3 mb-2">
+                    <p className="text-neutral-800">{question}</p>
+                  </div>
+                  <div className="bg-primary-50 rounded-lg p-3 ml-4">
+                    <p className="text-primary-800">{answer}</p>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="p-4 border-t border-neutral-200">
+              <div className="flex space-x-2">
+                <input
+                  type="text"
+                  value={question}
+                  onChange={(e) => setQuestion(e.target.value)}
+                  placeholder="Ask a question..."
+                  className="flex-1 px-4 py-2 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      handleAskQuestion();
+                    }
+                  }}
+                />
                 <button
-                  onClick={() => setShowChat(false)}
-                  className="text-neutral-500 hover:text-neutral-700"
+                  onClick={handleAskQuestion}
+                  disabled={isAnswering || !question.trim()}
+                  className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <X className="h-5 w-5" />
+                  {isAnswering ? (
+                    <div className="h-5 w-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                  ) : (
+                    'Send'
+                  )}
                 </button>
               </div>
-
-              <div className="flex-1 overflow-y-auto p-4">
-                {answer && (
-                  <div className="mb-4">
-                    <div className="bg-neutral-100 rounded-lg p-3 mb-2">
-                      <p className="text-neutral-800">{question}</p>
-                    </div>
-                    <div className="bg-primary-50 rounded-lg p-3 ml-4">
-                      <p className="text-primary-800">{answer}</p>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              <div className="p-4 border-t border-neutral-200">
-                <div className="flex space-x-2">
-                  <input
-                    type="text"
-                    value={question}
-                    onChange={(e) => setQuestion(e.target.value)}
-                    placeholder="Ask a question..."
-                    className="flex-1 px-4 py-2 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && !e.shiftKey) {
-                        e.preventDefault();
-                        handleAskQuestion();
-                      }
-                    }}
-                  />
-                  <button
-                    onClick={handleAskQuestion}
-                    disabled={isAnswering || !question.trim()}
-                    className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {isAnswering ? (
-                      <div className="h-5 w-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                    ) : (
-                      <Send className="h-5 w-5" />
-                    )}
-                  </button>
-                </div>
-              </div>
             </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+          </div>
+        </motion.div>
+      )}
     </div>
   );
 };

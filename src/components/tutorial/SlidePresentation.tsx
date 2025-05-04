@@ -1,26 +1,36 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Play, Pause, SkipBack, SkipForward, Volume2, VolumeX } from 'lucide-react';
-import type { SlidePresentation, Slide } from '../../services/slideService';
+import { Play, Pause, SkipBack, SkipForward } from 'lucide-react';
+import type { SlidePresentation } from '../../services/slideService';
 import slideService from '../../services/slideService';
 import ReactMarkdown from 'react-markdown';
 
 interface SlidePresentationProps {
   presentation: SlidePresentation;
+  isSpeakingEnabled: boolean;
 }
 
-const SlidePresentation: React.FC<SlidePresentationProps> = ({ presentation }) => {
+const SlidePresentation: React.FC<SlidePresentationProps> = ({ 
+  presentation,
+  isSpeakingEnabled
+}) => {
   const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [isMuted, setIsMuted] = useState(false);
 
   const currentSlide = presentation.slides[currentSlideIndex];
+
+  useEffect(() => {
+    // Stop presentation when speaking is disabled
+    if (!isSpeakingEnabled && isPlaying) {
+      stopPresentation();
+    }
+  }, [isSpeakingEnabled]);
 
   const startPresentation = () => {
     setIsPlaying(true);
     slideService.startPresentation(presentation, (index) => {
       setCurrentSlideIndex(index);
-    });
+    }, isSpeakingEnabled);
   };
 
   const stopPresentation = () => {
@@ -48,11 +58,6 @@ const SlidePresentation: React.FC<SlidePresentationProps> = ({ presentation }) =
       stopPresentation();
       setCurrentSlideIndex(currentSlideIndex - 1);
     }
-  };
-
-  const toggleMute = () => {
-    setIsMuted(!isMuted);
-    // Implementation of mute functionality would go here
   };
 
   return (
@@ -95,7 +100,12 @@ const SlidePresentation: React.FC<SlidePresentationProps> = ({ presentation }) =
 
             <button
               onClick={togglePlay}
-              className="p-3 bg-primary-600 text-white rounded-full hover:bg-primary-700"
+              disabled={!isSpeakingEnabled}
+              className={`p-3 rounded-full ${
+                isSpeakingEnabled 
+                  ? 'bg-primary-600 text-white hover:bg-primary-700' 
+                  : 'bg-neutral-200 text-neutral-500 cursor-not-allowed'
+              }`}
             >
               {isPlaying ? (
                 <Pause className="w-6 h-6" />
@@ -110,17 +120,6 @@ const SlidePresentation: React.FC<SlidePresentationProps> = ({ presentation }) =
               className="p-2 text-neutral-600 hover:text-primary-600 disabled:opacity-50"
             >
               <SkipForward className="w-5 h-5" />
-            </button>
-
-            <button
-              onClick={toggleMute}
-              className="p-2 text-neutral-600 hover:text-primary-600"
-            >
-              {isMuted ? (
-                <VolumeX className="w-5 h-5" />
-              ) : (
-                <Volume2 className="w-5 h-5" />
-              )}
             </button>
           </div>
 
