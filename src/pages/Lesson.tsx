@@ -1,14 +1,21 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { MessageSquare, ArrowLeft, Volume2, VolumeX, Play, Pause, X } from 'lucide-react';
+import { MessageSquare, ArrowLeft, Volume2, VolumeX, X } from 'lucide-react';
 import { useUserPreferences } from '../contexts/UserPreferencesContext';
 import { useAuth } from '../contexts/AuthContext';
 import geminiService from '../services/geminiService';
 import slideService from '../services/slideService';
 import SlidePresentation from '../components/tutorial/SlidePresentation';
+import Transcript from '../components/tutorial/Transcript';
+import Quiz from '../components/tutorial/Quiz';
 import type { SlidePresentation as SlidePresentationType } from '../services/slideService';
-import { speak, stopSpeaking } from '../services/voiceService';
+
+interface Caption {
+  start: number;
+  end: number;
+  text: string;
+}
 
 const Lesson: React.FC = () => {
   const { lessonId } = useParams<{ lessonId: string }>();
@@ -23,44 +30,42 @@ const Lesson: React.FC = () => {
   const [question, setQuestion] = useState('');
   const [answer, setAnswer] = useState<string | null>(null);
   const [isAnswering, setIsAnswering] = useState(false);
-  const [isSpeaking, setIsSpeaking] = useState(true);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
-  const [tutorialPaused, setTutorialPaused] = useState(false);
+  const [isSpeakingEnabled, setIsSpeakingEnabled] = useState(true);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [showQuiz, setShowQuiz] = useState(false);
+  const [captions, setCaptions] = useState<Caption[]>([]);
 
+  // Load presentation content
   useEffect(() => {
-    const validateRequirements = () => {
-      if (!lessonId) {
-        throw new Error('Lesson ID is required.');
-      }
-      if (!preferences?.subject) {
-        throw new Error('Subject preference is not set. Please complete onboarding.');
-      }
-      if (!preferences?.knowledgeLevel) {
-        throw new Error('Knowledge level is not set. Please complete onboarding.');
-      }
-      if (!geminiApiKey) {
-        throw new Error('Gemini API key is not set. Please add your API key in settings.');
-      }
-    };
-    
     const loadPresentation = async () => {
+      if (!lessonId || !preferences?.subject || !preferences?.knowledgeLevel || !geminiApiKey) {
+        return;
+      }
+
       setIsLoading(true);
       setError(null);
+
       try {
-        validateRequirements();
-        
         slideService.initialize(geminiApiKey);
-        
         const generatedPresentation = await slideService.generateSlidePresentation(
           preferences.subject,
           preferences.knowledgeLevel
         );
-        
         setPresentation(generatedPresentation);
+
+        // Generate captions
+        const generatedCaptions = generatedPresentation.slides.reduce<Caption[]>((acc, slide, index) => {
+          const startTime = acc.length > 0 ? acc[acc.length - 1].end : 0;
+          return [...acc, {
+            start: startTime,
+            end: startTime + slide.duration,
+            text: slide.narration
+          }];
+        }, []);
+        setCaptions(generatedCaptions);
       } catch (error: any) {
         console.error('Error loading presentation:', error);
-        setError(error.message || 'Failed to load presentation content. Please try again.');
+        setError(error.message || 'Failed to load presentation content');
       } finally {
         setIsLoading(false);
       }
@@ -69,47 +74,23 @@ const Lesson: React.FC = () => {
     loadPresentation();
   }, [lessonId, preferences, geminiApiKey]);
 
-  const togglePlayback = () => {
-    if (isPlaying) {
-      stopPresentation();
-    } else {
-      startPresentation();
-    }
-  };
-
-  const startPresentation = () => {
-    if (!presentation) return;
-    setIsPlaying(true);
-    setTutorialPaused(false);
+  const handleTimeUpdate = (time: number) => {
+    setCurrentTime(time);
     
-    if (isSpeaking) {
-      speak(presentation.slides[currentSlideIndex].narration, () => {
-        if (currentSlideIndex < presentation.slides.length - 1) {
-          setCurrentSlideIndex(prev => prev + 1);
-        } else {
-          stopPresentation();
-        }
-      });
+    // Show quiz every 5 minutes
+    if (Math.floor(time) % 300 === 0) {
+      setShowQuiz(true);
     }
   };
 
-  const stopPresentation = () => {
-    setIsPlaying(false);
-    stopSpeaking();
-  };
-
-  const toggleVoice = () => {
-    setIsSpeaking(!isSpeaking);
-    if (isSpeaking) {
-      stopSpeaking();
-    }
+  const handleQuizComplete = (correct: boolean) => {
+    setShowQuiz(false);
+    // You could track progress here
   };
 
   const handleAskQuestion = async () => {
-    if (!question.trim() || !preferences?.subject || !preferences?.knowledgeLevel) return;
+    if (!question.trim() || !preferences?.subject) return;
     
-    setTutorialPaused(true);
-    stopPresentation();
     setIsAnswering(true);
     setAnswer(null);
 
@@ -122,16 +103,10 @@ const Lesson: React.FC = () => {
       setAnswer(response);
     } catch (error: any) {
       console.error('Error getting answer:', error);
-      setAnswer(error.message || 'Sorry, I couldn\'t process your question. Please try again.');
+      setAnswer('Sorry, I couldn\'t process your question. Please try again.');
     } finally {
       setIsAnswering(false);
     }
-  };
-
-  const resumeTutorial = () => {
-    setTutorialPaused(false);
-    setShowChat(false);
-    startPresentation();
   };
 
   if (isLoading) {
@@ -143,7 +118,7 @@ const Lesson: React.FC = () => {
           className="text-center"
         >
           <div className="inline-block h-12 w-12 border-4 border-primary-300 border-t-primary-600 rounded-full animate-spin mb-4"></div>
-          <h2 className="text-2xl font-semibold text-neutral-800">Preparing your tutorial...</h2>
+          <h2 className="text-2xl font-semibold text-neutral-800">Preparing your lesson...</h2>
           <p className="mt-2 text-neutral-600">This may take a few moments</p>
         </motion.div>
       </div>
@@ -155,14 +130,14 @@ const Lesson: React.FC = () => {
       <div className="min-h-screen bg-neutral-50 flex items-center justify-center">
         <div className="text-center max-w-lg px-4">
           <div className="text-error-500 mb-4">⚠️</div>
-          <h2 className="text-2xl font-semibold text-neutral-800 mb-4">Unable to Load Tutorial</h2>
+          <h2 className="text-2xl font-semibold text-neutral-800 mb-4">Unable to Load Lesson</h2>
           <p className="text-neutral-600 mb-6">{error}</p>
           <button
             onClick={() => navigate('/dashboard')}
             className="inline-flex items-center px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
           >
             <ArrowLeft className="h-5 w-5 mr-2" />
-            Back to Topics
+            Back to Dashboard
           </button>
         </div>
       </div>
@@ -180,19 +155,19 @@ const Lesson: React.FC = () => {
               className="flex items-center text-neutral-700 hover:text-primary-600"
             >
               <ArrowLeft className="h-5 w-5 mr-1" />
-              <span className="font-medium">Back to Topics</span>
+              <span className="font-medium">Back to Dashboard</span>
             </button>
           </div>
           
           <div className="flex items-center space-x-4">
             <button
-              onClick={toggleVoice}
+              onClick={() => setIsSpeakingEnabled(!isSpeakingEnabled)}
               className={`p-2 rounded-full ${
-                isSpeaking ? 'bg-primary-100 text-primary-700' : 'bg-neutral-100 text-neutral-700'
+                isSpeakingEnabled ? 'bg-primary-100 text-primary-700' : 'bg-neutral-100 text-neutral-700'
               } hover:bg-primary-200`}
-              title={isSpeaking ? 'Disable voice' : 'Enable voice'}
+              title={isSpeakingEnabled ? 'Disable voice' : 'Enable voice'}
             >
-              {isSpeaking ? (
+              {isSpeakingEnabled ? (
                 <Volume2 className="h-5 w-5" />
               ) : (
                 <VolumeX className="h-5 w-5" />
@@ -215,60 +190,49 @@ const Lesson: React.FC = () => {
         <div className="max-w-5xl mx-auto">
           <h1 className="text-3xl font-bold text-neutral-800 mb-8">{presentation.title}</h1>
           
-          <div className="space-y-8">
-            <div className="bg-white rounded-lg shadow-lg overflow-hidden">
-              {/* Slide Content */}
-              <div className="relative aspect-video bg-neutral-900 flex items-center justify-center">
-                <AnimatePresence mode="wait">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <div className="lg:col-span-2 space-y-8">
+              {/* Slide Presentation */}
+              <SlidePresentation
+                presentation={presentation}
+                isSpeakingEnabled={isSpeakingEnabled}
+                onTimeUpdate={handleTimeUpdate}
+              />
+
+              {/* Quiz Modal */}
+              <AnimatePresence>
+                {showQuiz && (
                   <motion.div
-                    key={presentation.slides[currentSlideIndex].id}
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -20 }}
-                    transition={{ duration: 0.5 }}
-                    className="w-full h-full p-12 flex items-center justify-center"
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.95 }}
+                    className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
                   >
-                    <div className="prose prose-invert max-w-none">
-                      {presentation.slides[currentSlideIndex].content}
-                    </div>
+                    <Quiz
+                      question="What was the main concept covered in this section?"
+                      options={[
+                        "Option A",
+                        "Option B",
+                        "Option C",
+                        "Option D"
+                      ]}
+                      correctAnswer={0}
+                      onComplete={handleQuizComplete}
+                    />
                   </motion.div>
-                </AnimatePresence>
-              </div>
+                )}
+              </AnimatePresence>
+            </div>
 
-              {/* Controls */}
-              <div className="p-4 bg-white border-t border-neutral-200">
-                <div className="flex items-center justify-between">
-                  {/* Progress */}
-                  <div className="text-sm text-neutral-600">
-                    Slide {currentSlideIndex + 1} of {presentation.slides.length}
-                  </div>
-
-                  {/* Control Buttons */}
-                  <div className="flex items-center space-x-4">
-                    <button
-                      onClick={togglePlayback}
-                      disabled={!isSpeaking}
-                      className={`p-3 rounded-full ${
-                        isSpeaking 
-                          ? 'bg-primary-600 text-white hover:bg-primary-700' 
-                          : 'bg-neutral-200 text-neutral-500 cursor-not-allowed'
-                      }`}
-                    >
-                      {isPlaying ? (
-                        <Pause className="w-6 h-6" />
-                      ) : (
-                        <Play className="w-6 h-6" />
-                      )}
-                    </button>
-                  </div>
-
-                  {/* Duration */}
-                  <div className="text-sm text-neutral-600">
-                    {Math.floor(presentation.slides[currentSlideIndex].duration / 60)}:
-                    {(presentation.slides[currentSlideIndex].duration % 60).toString().padStart(2, '0')}
-                  </div>
-                </div>
-              </div>
+            {/* Transcript */}
+            <div className="lg:col-span-1">
+              <Transcript
+                captions={captions}
+                currentTime={currentTime}
+                onTimestampClick={(time) => {
+                  // Handle seeking to specific time
+                }}
+              />
             </div>
           </div>
         </div>
@@ -304,16 +268,6 @@ const Lesson: React.FC = () => {
                     <div className="bg-primary-50 rounded-lg p-3 ml-4">
                       <p className="text-primary-800">{answer}</p>
                     </div>
-                    {tutorialPaused && (
-                      <div className="mt-4 text-center">
-                        <button
-                          onClick={resumeTutorial}
-                          className="btn btn-primary"
-                        >
-                          Resume Tutorial
-                        </button>
-                      </div>
-                    )}
                   </div>
                 )}
               </div>
