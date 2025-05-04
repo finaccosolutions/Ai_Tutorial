@@ -1,21 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { MessageSquare, ArrowLeft, Volume2, VolumeX, X, AlertCircle } from 'lucide-react';
+import { ArrowLeft, Volume2, VolumeX, MessageSquare, X, AlertCircle } from 'lucide-react';
 import { useUserPreferences } from '../contexts/UserPreferencesContext';
 import { useAuth } from '../contexts/AuthContext';
 import geminiService from '../services/geminiService';
 import slideService from '../services/slideService';
 import SlidePresentation from '../components/tutorial/SlidePresentation';
-import Transcript from '../components/tutorial/Transcript';
 import Quiz from '../components/tutorial/Quiz';
 import type { SlidePresentation as SlidePresentationType } from '../services/slideService';
-
-interface Caption {
-  start: number;
-  end: number;
-  text: string;
-}
 
 const Lesson: React.FC = () => {
   const { lessonId } = useParams<{ lessonId: string }>();
@@ -33,9 +26,7 @@ const Lesson: React.FC = () => {
   const [isSpeakingEnabled, setIsSpeakingEnabled] = useState(true);
   const [currentTime, setCurrentTime] = useState(0);
   const [showQuiz, setShowQuiz] = useState(false);
-  const [captions, setCaptions] = useState<Caption[]>([]);
 
-  // Load presentation content
   useEffect(() => {
     const loadPresentation = async () => {
       if (!lessonId || !preferences?.subject || !preferences?.knowledgeLevel || !geminiApiKey) {
@@ -52,17 +43,6 @@ const Lesson: React.FC = () => {
           preferences.knowledgeLevel
         );
         setPresentation(generatedPresentation);
-
-        // Generate captions
-        const generatedCaptions = generatedPresentation.slides.reduce<Caption[]>((acc, slide, index) => {
-          const startTime = acc.length > 0 ? acc[acc.length - 1].end : 0;
-          return [...acc, {
-            start: startTime,
-            end: startTime + slide.duration,
-            text: slide.narration
-          }];
-        }, []);
-        setCaptions(generatedCaptions);
       } catch (error: any) {
         console.error('Error loading presentation:', error);
         setError(error.message || 'Failed to load presentation content');
@@ -85,7 +65,6 @@ const Lesson: React.FC = () => {
 
   const handleQuizComplete = (correct: boolean) => {
     setShowQuiz(false);
-    // You could track progress here
   };
 
   const handleAskQuestion = async () => {
@@ -202,26 +181,12 @@ const Lesson: React.FC = () => {
         <div className="max-w-5xl mx-auto">
           <h1 className="text-3xl font-bold text-neutral-800 mb-8">{presentation.title}</h1>
           
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            <div className="lg:col-span-2 space-y-8">
-              {/* Slide Presentation */}
-              <SlidePresentation
-                presentation={presentation}
-                isSpeakingEnabled={isSpeakingEnabled}
-                onTimeUpdate={handleTimeUpdate}
-              />
-            </div>
-
-            {/* Transcript */}
-            <div className="lg:col-span-1">
-              <Transcript
-                captions={captions}
-                currentTime={currentTime}
-                onTimestampClick={(time) => {
-                  // Handle seeking to specific time
-                }}
-              />
-            </div>
+          <div className="space-y-8">
+            <SlidePresentation
+              presentation={presentation}
+              isSpeakingEnabled={isSpeakingEnabled}
+              onTimeUpdate={handleTimeUpdate}
+            />
           </div>
         </div>
       </div>
