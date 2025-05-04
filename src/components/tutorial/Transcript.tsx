@@ -21,17 +21,18 @@ const Transcript: React.FC<TranscriptProps> = ({
 }) => {
   const activeRef = useRef<HTMLDivElement>(null);
   const [activeWordIndex, setActiveWordIndex] = useState(-1);
-  const [words, setWords] = useState<Array<{ text: string; start: number }>>([]);
+  const [words, setWords] = useState<Array<{ text: string; start: number; end: number }>>([]);
 
   useEffect(() => {
-    // Split captions into words with timestamps
-    const allWords = captions.flatMap((caption, captionIndex) => {
+    // Split captions into words with precise timestamps
+    const allWords = captions.flatMap((caption) => {
       const wordsInCaption = caption.text.split(' ');
       const timePerWord = (caption.end - caption.start) / wordsInCaption.length;
       
       return wordsInCaption.map((word, wordIndex) => ({
         text: word,
-        start: caption.start + (wordIndex * timePerWord)
+        start: caption.start + (wordIndex * timePerWord),
+        end: caption.start + ((wordIndex + 1) * timePerWord)
       }));
     });
     
@@ -39,13 +40,15 @@ const Transcript: React.FC<TranscriptProps> = ({
   }, [captions]);
 
   useEffect(() => {
-    // Find current word based on time
-    const currentWordIndex = words.findIndex((word, index) => {
-      const nextWord = words[index + 1];
-      return currentTime >= word.start && (!nextWord || currentTime < nextWord.start);
-    });
+    // Find current word with a small buffer for smoother transitions
+    const buffer = 0.1; // 100ms buffer
+    const currentWordIndex = words.findIndex((word) => 
+      currentTime >= (word.start - buffer) && currentTime < (word.end + buffer)
+    );
     
-    setActiveWordIndex(currentWordIndex);
+    if (currentWordIndex !== -1) {
+      setActiveWordIndex(currentWordIndex);
+    }
   }, [currentTime, words]);
 
   useEffect(() => {
@@ -74,6 +77,7 @@ const Transcript: React.FC<TranscriptProps> = ({
         {captions.map((caption, captionIndex) => {
           const isActive = currentTime >= caption.start && currentTime <= caption.end;
           const words = caption.text.split(' ');
+          const timePerWord = (caption.end - caption.start) / words.length;
           
           return (
             <motion.div
@@ -98,9 +102,9 @@ const Transcript: React.FC<TranscriptProps> = ({
                   isActive ? 'text-neutral-900' : 'text-neutral-700 group-hover:text-neutral-900'
                 }`}>
                   {words.map((word, wordIndex) => {
-                    const wordStart = caption.start + (wordIndex * ((caption.end - caption.start) / words.length));
-                    const isWordActive = currentTime >= wordStart && 
-                      currentTime < (wordStart + ((caption.end - caption.start) / words.length));
+                    const wordStart = caption.start + (wordIndex * timePerWord);
+                    const wordEnd = wordStart + timePerWord;
+                    const isWordActive = currentTime >= wordStart && currentTime < wordEnd;
                     
                     return (
                       <span

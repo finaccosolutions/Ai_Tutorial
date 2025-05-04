@@ -9,42 +9,60 @@ export const speak = (text: string, onEnd?: () => void, rate = 1, pitch = 1): Sp
     return null;
   }
 
-  // Cancel any ongoing speech
-  stopSpeaking();
+  // Only stop if there's an ongoing utterance
+  if (currentUtterance) {
+    window.speechSynthesis.cancel();
+    currentUtterance = null;
+  }
 
   // Create utterance
   const utterance = new SpeechSynthesisUtterance(text);
   currentUtterance = utterance;
   
-  // Select voice (English female voice if available)
-  const voices = window.speechSynthesis.getVoices();
-  const englishVoices = voices.filter(voice => voice.lang.includes('en'));
-  const femaleVoices = englishVoices.filter(voice => voice.name.includes('Female') || voice.name.includes('female'));
-  
-  if (femaleVoices.length > 0) {
-    utterance.voice = femaleVoices[0];
-  } else if (englishVoices.length > 0) {
-    utterance.voice = englishVoices[0];
-  }
-  
-  // Set properties
-  utterance.rate = rate;
-  utterance.pitch = pitch;
-  
-  // Event handlers
-  utterance.onend = () => {
-    currentUtterance = null;
-    if (onEnd) onEnd();
+  // Wait for voices to be loaded
+  const loadVoices = () => {
+    const voices = window.speechSynthesis.getVoices();
+    if (voices.length > 0) {
+      const englishVoices = voices.filter(voice => voice.lang.includes('en'));
+      const femaleVoices = englishVoices.filter(voice => voice.name.includes('Female') || voice.name.includes('female'));
+      
+      if (femaleVoices.length > 0) {
+        utterance.voice = femaleVoices[0];
+      } else if (englishVoices.length > 0) {
+        utterance.voice = englishVoices[0];
+      }
+      
+      // Set properties
+      utterance.rate = rate;
+      utterance.pitch = pitch;
+      
+      // Event handlers
+      utterance.onend = () => {
+        currentUtterance = null;
+        if (onEnd) onEnd();
+      };
+
+      utterance.onerror = (event) => {
+        console.error('Speech synthesis error:', event);
+        // Only reset if this is the current utterance
+        if (currentUtterance === utterance) {
+          currentUtterance = null;
+        }
+        // Attempt to resume speaking if interrupted
+        if (event.error === 'interrupted' && currentUtterance === utterance) {
+          setTimeout(() => speak(text, onEnd, rate, pitch), 100);
+        }
+      };
+      
+      // Start speaking
+      window.speechSynthesis.speak(utterance);
+    } else {
+      // If voices aren't loaded yet, wait and try again
+      setTimeout(loadVoices, 50);
+    }
   };
 
-  utterance.onerror = (event) => {
-    console.error('Speech synthesis error:', event);
-    currentUtterance = null;
-  };
-  
-  // Start speaking
-  window.speechSynthesis.speak(utterance);
-  
+  loadVoices();
   return utterance;
 };
 

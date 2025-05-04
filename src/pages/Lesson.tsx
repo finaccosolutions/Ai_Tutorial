@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { MessageSquare, ArrowLeft, Volume2, VolumeX, X } from 'lucide-react';
+import { MessageSquare, ArrowLeft, Volume2, VolumeX, X, AlertCircle } from 'lucide-react';
 import { useUserPreferences } from '../contexts/UserPreferencesContext';
 import { useAuth } from '../contexts/AuthContext';
 import geminiService from '../services/geminiService';
@@ -128,17 +128,29 @@ const Lesson: React.FC = () => {
   if (error || !presentation) {
     return (
       <div className="min-h-screen bg-neutral-50 flex items-center justify-center">
-        <div className="text-center max-w-lg px-4">
-          <div className="text-error-500 mb-4">⚠️</div>
-          <h2 className="text-2xl font-semibold text-neutral-800 mb-4">Unable to Load Lesson</h2>
-          <p className="text-neutral-600 mb-6">{error}</p>
-          <button
-            onClick={() => navigate('/dashboard')}
-            className="inline-flex items-center px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
-          >
-            <ArrowLeft className="h-5 w-5 mr-2" />
-            Back to Dashboard
-          </button>
+        <div className="max-w-lg mx-auto px-4 py-8 text-center">
+          <div className="bg-white rounded-lg shadow-lg p-8 border border-neutral-200">
+            <div className="flex items-center justify-center mb-6">
+              <AlertCircle className="h-12 w-12 text-error-500" />
+            </div>
+            <h2 className="text-2xl font-semibold text-neutral-800 mb-4">Unable to Load Lesson</h2>
+            <p className="text-neutral-600 mb-6">{error}</p>
+            <div className="flex justify-center gap-4">
+              <button
+                onClick={() => navigate('/dashboard')}
+                className="btn btn-secondary flex items-center"
+              >
+                <ArrowLeft className="h-5 w-5 mr-2" />
+                Back to Dashboard
+              </button>
+              <button
+                onClick={() => window.location.reload()}
+                className="btn btn-primary"
+              >
+                Try Again
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     );
@@ -198,30 +210,6 @@ const Lesson: React.FC = () => {
                 isSpeakingEnabled={isSpeakingEnabled}
                 onTimeUpdate={handleTimeUpdate}
               />
-
-              {/* Quiz Modal */}
-              <AnimatePresence>
-                {showQuiz && (
-                  <motion.div
-                    initial={{ opacity: 0, scale: 0.95 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0, scale: 0.95 }}
-                    className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
-                  >
-                    <Quiz
-                      question="What was the main concept covered in this section?"
-                      options={[
-                        "Option A",
-                        "Option B",
-                        "Option C",
-                        "Option D"
-                      ]}
-                      correctAnswer={0}
-                      onComplete={handleQuizComplete}
-                    />
-                  </motion.div>
-                )}
-              </AnimatePresence>
             </div>
 
             {/* Transcript */}
@@ -279,7 +267,7 @@ const Lesson: React.FC = () => {
                     value={question}
                     onChange={(e) => setQuestion(e.target.value)}
                     placeholder="Ask a question..."
-                    className="flex-1 px-4 py-2 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    className="input flex-grow"
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' && !e.shiftKey) {
                         e.preventDefault();
@@ -290,7 +278,7 @@ const Lesson: React.FC = () => {
                   <button
                     onClick={handleAskQuestion}
                     disabled={isAnswering || !question.trim()}
-                    className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="btn btn-primary"
                   >
                     {isAnswering ? (
                       <div className="h-5 w-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
