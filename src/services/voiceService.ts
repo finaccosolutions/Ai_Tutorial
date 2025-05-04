@@ -32,16 +32,6 @@ export const speak = (text: string, onEnd?: () => void, rate = 1, pitch = 1): Sp
   utterance.onend = () => {
     if (onEnd) onEnd();
   };
-
-  // Handle browser limitations
-  const restartSpeech = () => {
-    if (window.speechSynthesis.speaking) {
-      window.speechSynthesis.pause();
-      window.speechSynthesis.resume();
-      setTimeout(restartSpeech, 5000);
-    }
-  };
-  setTimeout(restartSpeech, 5000);
   
   // Start speaking
   window.speechSynthesis.speak(utterance);
@@ -63,7 +53,7 @@ export enum ListeningState {
   PROCESSING
 }
 
-// Speech recognition function
+// Mock speech recognition function (in a real app, use Web Speech API or a library)
 export const startListening = (
   onResult: (text: string) => void,
   onStateChange: (state: ListeningState) => void,
@@ -81,7 +71,7 @@ export const startListening = (
   const recognition = new SpeechRecognition();
   recognition.continuous = false;
   recognition.interimResults = true;
-  recognition.lang = 'en-US';
+  recognition.lang = 'en-US'; // Default to English
   
   // Set state to listening
   onStateChange(ListeningState.LISTENING);

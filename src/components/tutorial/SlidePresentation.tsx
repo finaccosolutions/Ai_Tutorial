@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Play, Pause, SkipBack, SkipForward, Volume2, VolumeX, Maximize2 } from 'lucide-react';
+import { Play, Pause, SkipBack, SkipForward, Volume2, VolumeX } from 'lucide-react';
 import type { SlidePresentation } from '../../services/slideService';
 import slideService from '../../services/slideService';
 import ReactMarkdown from 'react-markdown';
@@ -20,8 +20,6 @@ const SlidePresentation: React.FC<SlidePresentationProps> = ({
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
-  const [isFullscreen, setIsFullscreen] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
 
   const currentSlide = presentation.slides[currentSlideIndex];
 
@@ -30,19 +28,10 @@ const SlidePresentation: React.FC<SlidePresentationProps> = ({
   }, [presentation]);
 
   useEffect(() => {
-    slideService.setIsSpeakingEnabled(isSpeakingEnabled);
+    if (!isSpeakingEnabled && isPlaying) {
+      stopPresentation();
+    }
   }, [isSpeakingEnabled]);
-
-  useEffect(() => {
-    const handleFullscreenChange = () => {
-      setIsFullscreen(!!document.fullscreenElement);
-    };
-
-    document.addEventListener('fullscreenchange', handleFullscreenChange);
-    return () => {
-      document.removeEventListener('fullscreenchange', handleFullscreenChange);
-    };
-  }, []);
 
   const startPresentation = () => {
     setIsPlaying(true);
@@ -66,18 +55,7 @@ const SlidePresentation: React.FC<SlidePresentationProps> = ({
     if (isPlaying) {
       stopPresentation();
     } else {
-      if (currentTime >= duration) {
-        setCurrentTime(0);
-        setCurrentSlideIndex(0);
-      }
-      slideService.resumePresentation(
-        (index) => setCurrentSlideIndex(index),
-        (time) => {
-          setCurrentTime(time);
-          onTimeUpdate?.(time);
-        }
-      );
-      setIsPlaying(true);
+      startPresentation();
     }
   };
 
@@ -85,11 +63,6 @@ const SlidePresentation: React.FC<SlidePresentationProps> = ({
     if (currentSlideIndex < presentation.slides.length - 1) {
       stopPresentation();
       setCurrentSlideIndex(currentSlideIndex + 1);
-      const newTime = presentation.slides
-        .slice(0, currentSlideIndex + 1)
-        .reduce((total, slide) => total + slide.duration, 0);
-      setCurrentTime(newTime);
-      onTimeUpdate?.(newTime);
     }
   };
 
@@ -97,11 +70,6 @@ const SlidePresentation: React.FC<SlidePresentationProps> = ({
     if (currentSlideIndex > 0) {
       stopPresentation();
       setCurrentSlideIndex(currentSlideIndex - 1);
-      const newTime = presentation.slides
-        .slice(0, currentSlideIndex - 1)
-        .reduce((total, slide) => total + slide.duration, 0);
-      setCurrentTime(newTime);
-      onTimeUpdate?.(newTime);
     }
   };
 
@@ -109,15 +77,8 @@ const SlidePresentation: React.FC<SlidePresentationProps> = ({
     const time = parseInt(e.target.value);
     setCurrentTime(time);
     const newSlideIndex = slideService.seekTo(time);
-    setCurrentSlideIndex(newSlideIndex);
-    onTimeUpdate?.(time);
-  };
-
-  const toggleFullscreen = () => {
-    if (!document.fullscreenElement) {
-      containerRef.current?.requestFullscreen();
-    } else {
-      document.exitFullscreen();
+    if (typeof newSlideIndex === 'number') {
+      setCurrentSlideIndex(newSlideIndex);
     }
   };
 
@@ -128,11 +89,9 @@ const SlidePresentation: React.FC<SlidePresentationProps> = ({
   };
 
   return (
-    <div ref={containerRef} className="bg-white rounded-lg shadow-lg overflow-hidden">
+    <div className="bg-white rounded-lg shadow-lg overflow-hidden">
       {/* Slide Content */}
-      <div className={`relative bg-neutral-900 flex items-center justify-center ${
-        isFullscreen ? 'h-screen' : 'aspect-video'
-      }`}>
+      <div className="relative aspect-video bg-neutral-900 flex items-center justify-center">
         <AnimatePresence mode="wait">
           <motion.div
             key={currentSlide.id}
@@ -149,8 +108,7 @@ const SlidePresentation: React.FC<SlidePresentationProps> = ({
                   <img
                     src={`https://source.unsplash.com/800x400/?${encodeURIComponent(currentSlide.visualAid)}`}
                     alt={currentSlide.visualAid}
-                    className="rounded-lg mx-auto max-w-full h-auto"
-                    loading="eager"
+                    className="rounded-lg mx-auto"
                   />
                 </div>
               )}
@@ -170,7 +128,7 @@ const SlidePresentation: React.FC<SlidePresentationProps> = ({
             max={duration}
             value={currentTime}
             onChange={handleSeek}
-            className="flex-grow h-1 bg-neutral-200 rounded-full appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary-600"
+            className="flex-grow h-1 bg-neutral-200 rounded-full appearance-none cursor-pointer"
           />
           <span className="text-sm text-neutral-600">{formatTime(duration)}</span>
         </div>
@@ -193,7 +151,12 @@ const SlidePresentation: React.FC<SlidePresentationProps> = ({
 
             <button
               onClick={togglePlay}
-              className="p-3 rounded-full bg-primary-600 text-white hover:bg-primary-700"
+              disabled={!isSpeakingEnabled}
+              className={`p-3 rounded-full ${
+                isSpeakingEnabled 
+                  ? 'bg-primary-600 text-white hover:bg-primary-700' 
+                  : 'bg-neutral-200 text-neutral-500 cursor-not-allowed'
+              }`}
             >
               {isPlaying ? (
                 <Pause className="w-6 h-6" />
@@ -208,13 +171,6 @@ const SlidePresentation: React.FC<SlidePresentationProps> = ({
               className="p-2 text-neutral-600 hover:text-primary-600 disabled:opacity-50"
             >
               <SkipForward className="w-5 h-5" />
-            </button>
-
-            <button
-              onClick={toggleFullscreen}
-              className="p-2 text-neutral-600 hover:text-primary-600"
-            >
-              <Maximize2 className="w-5 h-5" />
             </button>
           </div>
 

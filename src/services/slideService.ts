@@ -23,11 +23,6 @@ class SlideService {
   private model: any = null;
   private currentPresentation: SlidePresentation | null = null;
   private playbackTimer: NodeJS.Timeout | null = null;
-  private currentSlideIndex: number = 0;
-  private isPlaying: boolean = false;
-  private isSpeakingEnabled: boolean = true;
-  private currentChunkIndex: number = 0;
-  private textChunks: string[] = [];
 
   initialize(apiKey: string): void {
     if (!apiKey) {
@@ -50,26 +45,18 @@ class SlideService {
 
     const prompt = `
       Create an educational presentation about "${topic}" for ${level} level students.
-      The presentation should include:
-      1. A clear title and description
-      2. 5-7 slides that build upon each other
-      3. For each slide:
-         - Detailed content in markdown format
-         - A natural speaking script
-         - A relevant visual aid description
-         - Appropriate duration (30-60 seconds)
-      
+      Include visual descriptions and engaging content.
       Format as JSON with:
       {
         "title": "Presentation title",
         "description": "Brief overview",
         "slides": [
           {
-            "id": "slide_1",
-            "content": "Markdown content",
+            "id": "unique_id",
+            "content": "Slide content in markdown",
             "narration": "Natural speaking script",
-            "duration": 45,
-            "visualAid": "Description for visual"
+            "duration": seconds_for_slide,
+            "visualAid": "Description of visual aid or diagram"
           }
         ]
       }
@@ -106,155 +93,80 @@ class SlideService {
     }
   }
 
-  private splitTextIntoChunks(text: string): string[] {
-    // Split text into sentences and group them into chunks
-    const sentences = text.match(/[^.!?]+[.!?]+/g) || [text];
-    const chunks: string[] = [];
-    let currentChunk = '';
-    
-    for (const sentence of sentences) {
-      if (currentChunk.length + sentence.length < 200) {
-        currentChunk += sentence;
-      } else {
-        if (currentChunk) chunks.push(currentChunk);
-        currentChunk = sentence;
-      }
-    }
-    if (currentChunk) chunks.push(currentChunk);
-    
-    return chunks;
-  }
-
-  private speakCurrentChunk(): void {
-    if (!this.isPlaying || !this.isSpeakingEnabled || this.currentChunkIndex >= this.textChunks.length) {
-      return;
-    }
-
-    speak(this.textChunks[this.currentChunkIndex], () => {
-      this.currentChunkIndex++;
-      if (this.currentChunkIndex < this.textChunks.length) {
-        this.speakCurrentChunk();
-      }
-    });
-  }
-
   startPresentation(
     presentation: SlidePresentation,
     onSlideChange: (slideIndex: number) => void,
     onTimeUpdate: (currentTime: number) => void,
     isSpeakingEnabled: boolean
-  ): void {
+  ): () => void {
     this.currentPresentation = presentation;
-    this.currentSlideIndex = 0;
-    this.isPlaying = true;
-    this.isSpeakingEnabled = isSpeakingEnabled;
+    let currentSlideIndex = 0;
+    let currentTime = 0;
+    let isPlaying = true;
 
-    const updatePresentation = () => {
-      if (!this.isPlaying || !this.currentPresentation) return;
+    const updateTimer = () => {
+      if (!isPlaying) return;
 
-      const currentTime = this.currentPresentation.currentTime;
-      onTimeUpdate(currentTime);
+      this.playbackTimer = setInterval(() => {
+        currentTime++;
+        onTimeUpdate(currentTime);
 
-      let accumulatedDuration = 0;
-      for (let i = 0; i <= this.currentSlideIndex; i++) {
-        accumulatedDuration += this.currentPresentation.slides[i].duration;
-      }
-
-      if (currentTime >= accumulatedDuration && this.currentSlideIndex < this.currentPresentation.slides.length - 1) {
-        this.currentSlideIndex++;
-        onSlideChange(this.currentSlideIndex);
-        
-        if (this.isSpeakingEnabled) {
-          const narration = this.currentPresentation.slides[this.currentSlideIndex].narration;
-          this.textChunks = this.splitTextIntoChunks(narration);
-          this.currentChunkIndex = 0;
-          this.speakCurrentChunk();
+        const currentSlide = presentation.slides[currentSlideIndex];
+        if (currentTime >= currentSlide.duration) {
+          currentSlideIndex++;
+          if (currentSlideIndex < presentation.slides.length) {
+            onSlideChange(currentSlideIndex);
+            if (isSpeakingEnabled) {
+              speak(presentation.slides[currentSlideIndex].narration);
+            }
+          } else {
+            this.stopPresentation();
+          }
         }
-      }
-
-      this.currentPresentation.currentTime++;
-      this.playbackTimer = setTimeout(updatePresentation, 1000);
+      }, 1000);
     };
 
     // Start presentation
-    if (this.isSpeakingEnabled) {
-      const narration = presentation.slides[0].narration;
-      this.textChunks = this.splitTextIntoChunks(narration);
-      this.currentChunkIndex = 0;
-      this.speakCurrentChunk();
+    if (isSpeakingEnabled) {
+      speak(presentation.slides[0].narration);
     }
-    updatePresentation();
+    updateTimer();
+
+    // Return cleanup function
+    return () => {
+      isPlaying = false;
+      if (this.playbackTimer) {
+        clearInterval(this.playbackTimer);
+      }
+      stopSpeaking();
+    };
   }
 
-  stopPresentation(): void {
-    this.isPlaying = false;
+  stopPresentation() {
     if (this.playbackTimer) {
-      clearTimeout(this.playbackTimer);
+      clearInterval(this.playbackTimer);
       this.playbackTimer = null;
     }
     stopSpeaking();
   }
 
-  resumePresentation(
-    onSlideChange: (slideIndex: number) => void,
-    onTimeUpdate: (currentTime: number) => void
-  ): void {
+  seekTo(time: number): void {
     if (!this.currentPresentation) return;
 
-    this.isPlaying = true;
-    if (this.isSpeakingEnabled) {
-      const narration = this.currentPresentation.slides[this.currentSlideIndex].narration;
-      this.textChunks = this.splitTextIntoChunks(narration);
-      this.currentChunkIndex = 0;
-      this.speakCurrentChunk();
-    }
-    
-    this.startPresentation(
-      this.currentPresentation,
-      onSlideChange,
-      onTimeUpdate,
-      this.isSpeakingEnabled
-    );
-  }
-
-  seekTo(time: number): number {
-    if (!this.currentPresentation) return 0;
-
-    let accumulatedTime = 0;
     let slideIndex = 0;
+    let accumulatedTime = 0;
 
+    // Find the correct slide based on time
     for (let i = 0; i < this.currentPresentation.slides.length; i++) {
       accumulatedTime += this.currentPresentation.slides[i].duration;
-      if (time < accumulatedTime) {
+      if (accumulatedTime > time) {
         slideIndex = i;
         break;
       }
     }
 
     this.currentPresentation.currentTime = time;
-    this.currentSlideIndex = slideIndex;
-    
-    if (this.isPlaying && this.isSpeakingEnabled) {
-      stopSpeaking();
-      const narration = this.currentPresentation.slides[slideIndex].narration;
-      this.textChunks = this.splitTextIntoChunks(narration);
-      this.currentChunkIndex = 0;
-      this.speakCurrentChunk();
-    }
-    
     return slideIndex;
-  }
-
-  setIsSpeakingEnabled(enabled: boolean): void {
-    this.isSpeakingEnabled = enabled;
-    if (!enabled) {
-      stopSpeaking();
-    } else if (this.isPlaying && this.currentPresentation) {
-      const narration = this.currentPresentation.slides[this.currentSlideIndex].narration;
-      this.textChunks = this.splitTextIntoChunks(narration);
-      this.currentChunkIndex = 0;
-      this.speakCurrentChunk();
-    }
   }
 }
 
