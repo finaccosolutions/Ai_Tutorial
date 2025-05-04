@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { MessageSquare, ArrowLeft, Send, X } from 'lucide-react';
+import { MessageSquare, ArrowLeft, Send, X, Volume2, VolumeX } from 'lucide-react';
 import { useUserPreferences } from '../contexts/UserPreferencesContext';
 import { useAuth } from '../contexts/AuthContext';
 import geminiService from '../services/geminiService';
 import slideService from '../services/slideService';
+import { speak, stopSpeaking } from '../services/voiceService';
 import SlidePresentation from '../components/tutorial/SlidePresentation';
 import type { SlidePresentation as SlidePresentationType } from '../services/slideService';
 
@@ -22,6 +23,7 @@ const Lesson: React.FC = () => {
   const [question, setQuestion] = useState('');
   const [answer, setAnswer] = useState<string | null>(null);
   const [isAnswering, setIsAnswering] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState(false);
 
   useEffect(() => {
     if (!topicId || !preferences?.subject || !preferences?.knowledgeLevel || !geminiApiKey) {
@@ -62,11 +64,23 @@ const Lesson: React.FC = () => {
         preferences.knowledgeLevel
       );
       setAnswer(response);
+      
+      // Speak the answer if voice is enabled
+      if (isSpeaking) {
+        speak(response);
+      }
     } catch (error: any) {
       console.error('Error getting answer:', error);
       setAnswer(error.message || 'Sorry, I couldn\'t process your question. Please try again.');
     } finally {
       setIsAnswering(false);
+    }
+  };
+
+  const toggleVoice = () => {
+    setIsSpeaking(!isSpeaking);
+    if (isSpeaking) {
+      stopSpeaking();
     }
   };
 
@@ -123,6 +137,19 @@ const Lesson: React.FC = () => {
           </div>
           
           <div className="flex items-center space-x-4">
+            <button
+              onClick={toggleVoice}
+              className={`p-2 rounded-full ${
+                isSpeaking ? 'bg-primary-100 text-primary-700' : 'bg-neutral-100 text-neutral-700'
+              } hover:bg-primary-200`}
+              title={isSpeaking ? 'Disable voice' : 'Enable voice'}
+            >
+              {isSpeaking ? (
+                <Volume2 className="h-5 w-5" />
+              ) : (
+                <VolumeX className="h-5 w-5" />
+              )}
+            </button>
             <button
               onClick={() => setShowChat(!showChat)}
               className={`p-2 rounded-full ${

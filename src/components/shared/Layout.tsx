@@ -1,14 +1,19 @@
 import React from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
-import { GraduationCap as Graduation, User, Settings, LogOut, Menu, X } from 'lucide-react';
+import { GraduationCap as Graduation, User, Settings, LogOut, Menu, X, ChevronDown } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 
 const Layout: React.FC = () => {
   const { user, logout } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
+  const [dropdownOpen, setDropdownOpen] = React.useState(false);
+
+  // Get user's email and create a display name
+  const userEmail = user?.email || '';
+  const displayName = userEmail.split('@')[0];
 
   // Handle logout
   const handleLogout = () => {
@@ -52,19 +57,52 @@ const Layout: React.FC = () => {
             >
               Settings
             </Link>
-            <div className="flex items-center space-x-3">
-              <div className="flex items-center space-x-2">
+            <div className="relative">
+              <button
+                onClick={() => setDropdownOpen(!dropdownOpen)}
+                className="flex items-center space-x-2 focus:outline-none"
+              >
                 <div className="h-8 w-8 rounded-full bg-primary-100 flex items-center justify-center">
                   <User className="h-5 w-5 text-primary-700" />
                 </div>
-                <span className="text-sm font-medium text-neutral-700">{user?.name || 'User'}</span>
-              </div>
-              <button 
-                onClick={handleLogout}
-                className="text-neutral-500 hover:text-error-500"
-              >
-                <LogOut className="h-5 w-5" />
+                <span className="text-sm font-medium text-neutral-700">{displayName}</span>
+                <ChevronDown className={`h-4 w-4 text-neutral-500 transition-transform ${dropdownOpen ? 'rotate-180' : ''}`} />
               </button>
+
+              {/* Dropdown menu */}
+              <AnimatePresence>
+                {dropdownOpen && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: 10 }}
+                    className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg py-1 border border-neutral-200"
+                  >
+                    <div className="px-4 py-2 border-b border-neutral-200">
+                      <p className="text-sm font-medium text-neutral-900">{displayName}</p>
+                      <p className="text-xs text-neutral-500">{userEmail}</p>
+                    </div>
+                    <Link
+                      to="/settings"
+                      className="block px-4 py-2 text-sm text-neutral-700 hover:bg-neutral-50 flex items-center"
+                      onClick={() => setDropdownOpen(false)}
+                    >
+                      <Settings className="h-4 w-4 mr-2" />
+                      Account Settings
+                    </Link>
+                    <button
+                      onClick={() => {
+                        setDropdownOpen(false);
+                        handleLogout();
+                      }}
+                      className="block w-full px-4 py-2 text-sm text-error-600 hover:bg-neutral-50 flex items-center"
+                    >
+                      <LogOut className="h-4 w-4 mr-2" />
+                      Sign Out
+                    </button>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
           </nav>
         </div>
@@ -98,18 +136,22 @@ const Layout: React.FC = () => {
             >
               Settings
             </Link>
-            <div className="mt-3 pt-3 border-t border-neutral-200 flex justify-between items-center">
-              <div className="flex items-center space-x-2">
+            <div className="mt-3 pt-3 border-t border-neutral-200">
+              <div className="flex items-center space-x-2 mb-3">
                 <div className="h-8 w-8 rounded-full bg-primary-100 flex items-center justify-center">
                   <User className="h-5 w-5 text-primary-700" />
                 </div>
-                <span className="text-sm font-medium text-neutral-700">{user?.name || 'User'}</span>
+                <div>
+                  <p className="text-sm font-medium text-neutral-900">{displayName}</p>
+                  <p className="text-xs text-neutral-500">{userEmail}</p>
+                </div>
               </div>
               <button 
                 onClick={handleLogout}
-                className="text-neutral-500 hover:text-error-500 p-2"
+                className="w-full flex items-center text-error-600 hover:text-error-700 py-2"
               >
-                <LogOut className="h-5 w-5" />
+                <LogOut className="h-5 w-5 mr-2" />
+                Sign Out
               </button>
             </div>
           </nav>

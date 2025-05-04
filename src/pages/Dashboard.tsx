@@ -1,9 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Play, BookOpen, User2, Settings, Search } from 'lucide-react';
+import { Play, BookOpen, User2, Settings } from 'lucide-react';
 import { useUserPreferences } from '../contexts/UserPreferencesContext';
-import { useLesson } from '../contexts/LessonContext';
 import { useAuth } from '../contexts/AuthContext';
 import geminiService from '../services/geminiService';
 
@@ -31,10 +30,15 @@ const Dashboard: React.FC = () => {
   
   // Load topics
   useEffect(() => {
+    if (!geminiApiKey) {
+      navigate('/api-key-setup');
+      return;
+    }
+
     if (preferences?.subject) {
       loadTopics();
     }
-  }, [preferences?.subject]);
+  }, [preferences?.subject, geminiApiKey]);
 
   const loadTopics = async () => {
     if (!preferences?.subject) return;
