@@ -45,16 +45,12 @@ class SlideService {
   }
 
   private sanitizeJsonResponse(text: string): string {
-    // Remove any markdown code block indicators
     let sanitized = text.replace(/^```json\s*/g, '')
                        .replace(/^```\s*/g, '')
                        .replace(/\s*```$/g, '')
                        .trim();
     
-    // Remove any potential trailing commas before closing braces/brackets
     sanitized = sanitized.replace(/,(\s*[}\]])/g, '$1');
-    
-    // Ensure proper JSON string escaping
     sanitized = sanitized.replace(/(?<!\\)\\(?!["\\/bfnrtu])/g, '\\\\');
     
     return sanitized;
@@ -108,7 +104,6 @@ class SlideService {
     } catch (error) {
       if (attempt < this.MAX_RETRIES) {
         console.warn(`Attempt ${attempt} failed, retrying...`);
-        // Add exponential backoff delay
         await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 1000));
         return this.retryGenerateContent(prompt, attempt + 1);
       }
@@ -121,7 +116,7 @@ class SlideService {
       throw new Error('Gemini API not initialized. Please set API key first.');
     }
 
-    const prompt = `You are a presentation generator. Generate an educational presentation about "${topic}" for ${level} level students. Return ONLY a JSON object with no additional formatting or markdown syntax. The response must be a valid JSON object with the following structure:
+    const prompt = `Generate an engaging educational presentation about "${topic}" for ${level} level students. Return ONLY a JSON object with the following structure:
 
 {
   "title": "Main presentation title",
@@ -129,15 +124,21 @@ class SlideService {
   "slides": [
     {
       "id": "slide_1",
-      "content": "# Slide Title\\n- Key point 1\\n- Key point 2",
-      "narration": "Natural speaking script for this slide",
-      "duration": 45,
-      "visualAid": "Description for relevant image"
+      "content": "# Main Concept\\n\\n## Key Points\\n- Detailed explanation of first point\\n- In-depth coverage of second point\\n- Practical examples and applications\\n\\n## Real-world Applications\\n1. Industry example\\n2. Practical use case\\n3. Common scenarios",
+      "narration": "Detailed speaking script that thoroughly explains the concepts in a conversational tone",
+      "duration": 90,
+      "visualAid": "Detailed description for relevant image"
     }
   ]
 }
 
-Create 5-7 slides with engaging, educational content. Each slide should have clear content with headers and bullet points (using markdown syntax within the content string), a conversational narration script, a relevant visual aid description, and a duration between 30-60 seconds.`;
+Create 4-5 comprehensive slides with rich, educational content. Each slide should:
+- Have detailed content with clear headers and well-structured points
+- Include thorough explanations and examples
+- Provide practical applications and real-world context
+- Have a natural, engaging narration script
+- Include relevant visual aid descriptions
+- Have a duration between 60-120 seconds for proper coverage`;
 
     try {
       const presentation = await this.retryGenerateContent(prompt);
@@ -157,7 +158,6 @@ Create 5-7 slides with engaging, educational content. Each slide should have cle
     } catch (error) {
       console.error('Error generating presentation:', error);
       
-      // Provide more specific error messages
       if (error instanceof SyntaxError) {
         throw new Error('Failed to parse the AI response. Please try again.');
       } else if (error instanceof Error && error.message.includes('Invalid presentation format')) {
@@ -176,6 +176,8 @@ Create 5-7 slides with engaging, educational content. Each slide should have cle
     onTimeUpdate: (currentTime: number) => void,
     isSpeakingEnabled: boolean
   ): void {
+    if (!presentation || !presentation.slides.length) return;
+
     this.currentPresentation = presentation;
     this.currentSlideIndex = 0;
     this.isPlaying = true;
@@ -209,7 +211,7 @@ Create 5-7 slides with engaging, educational content. Each slide should have cle
       this.playbackTimer = setTimeout(updatePresentation, 1000);
     };
 
-    if (this.isSpeakingEnabled && presentation.slides.length > 0) {
+    if (this.isSpeakingEnabled) {
       speak(presentation.slides[0].narration);
     }
     updatePresentation();
