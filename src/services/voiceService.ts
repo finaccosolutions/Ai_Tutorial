@@ -1,40 +1,74 @@
 // Voice service for text-to-speech and speech-to-text functionality
 
+let currentUtterance: SpeechSynthesisUtterance | null = null;
+
 // Text-to-speech function
-export const speak = (text: string, onEnd?: () => void, rate = 1, pitch = 1): SpeechSynthesisUtterance | null => {
+export const speak = (
+  text: string, 
+  onEnd?: () => void, 
+  rate = 1
+): SpeechSynthesisUtterance | null => {
   if (!window.speechSynthesis) {
     console.error('Speech synthesis not supported in this browser');
     return null;
   }
 
   // Cancel any ongoing speech
-  window.speechSynthesis.cancel();
+  stopSpeaking();
 
   // Create utterance
   const utterance = new SpeechSynthesisUtterance(text);
+  currentUtterance = utterance;
   
-  // Select voice (English female voice if available)
-  const voices = window.speechSynthesis.getVoices();
-  const englishVoices = voices.filter(voice => voice.lang.includes('en'));
-  const femaleVoices = englishVoices.filter(voice => voice.name.includes('Female') || voice.name.includes('female'));
-  
-  if (femaleVoices.length > 0) {
-    utterance.voice = femaleVoices[0];
-  } else if (englishVoices.length > 0) {
-    utterance.voice = englishVoices[0];
-  }
-  
-  // Set properties
-  utterance.rate = rate;
-  utterance.pitch = pitch;
-  
-  // Event handlers
-  utterance.onend = () => {
-    if (onEnd) onEnd();
+  // Wait for voices to be loaded
+  const loadVoices = () => {
+    const voices = window.speechSynthesis.getVoices();
+    const englishVoices = voices.filter(voice => voice.lang.includes('en'));
+    const femaleVoices = englishVoices.filter(voice => 
+      voice.name.toLowerCase().includes('female') || 
+      voice.name.includes('Samantha') ||
+      voice.name.includes('Victoria')
+    );
+    
+    if (femaleVoices.length > 0) {
+      utterance.voice = femaleVoices[0];
+    } else if (englishVoices.length > 0) {
+      utterance.voice = englishVoices[0];
+    }
+    
+    // Set properties
+    utterance.rate = rate;
+    utterance.pitch = 1;
+    utterance.volume = 1;
+    
+    // Event handlers
+    utterance.onend = () => {
+      currentUtterance = null;
+      if (onEnd) onEnd();
+    };
+
+    utterance.onerror = (event) => {
+      console.error('Speech synthesis error:', event);
+      currentUtterance = null;
+    };
+    
+    // Start speaking
+    try {
+      window.speechSynthesis.speak(utterance);
+    } catch (error) {
+      console.error('Failed to start speech:', error);
+      currentUtterance = null;
+    }
   };
-  
-  // Start speaking
-  window.speechSynthesis.speak(utterance);
+
+  // Check if voices are already loaded
+  const voices = window.speechSynthesis.getVoices();
+  if (voices.length > 0) {
+    loadVoices();
+  } else {
+    // Wait for voices to be loaded
+    window.speechSynthesis.onvoiceschanged = loadVoices;
+  }
   
   return utterance;
 };
@@ -43,6 +77,7 @@ export const speak = (text: string, onEnd?: () => void, rate = 1, pitch = 1): Sp
 export const stopSpeaking = (): void => {
   if (window.speechSynthesis) {
     window.speechSynthesis.cancel();
+    currentUtterance = null;
   }
 };
 
@@ -53,13 +88,12 @@ export enum ListeningState {
   PROCESSING
 }
 
-// Mock speech recognition function (in a real app, use Web Speech API or a library)
+// Speech recognition function
 export const startListening = (
   onResult: (text: string) => void,
   onStateChange: (state: ListeningState) => void,
   onError: (error: string) => void
 ): { stop: () => void } => {
-  // Check if browser supports SpeechRecognition
   const SpeechRecognition = window.SpeechRecognition || (window as any).webkitSpeechRecognition;
   
   if (!SpeechRecognition) {
@@ -67,16 +101,13 @@ export const startListening = (
     return { stop: () => {} };
   }
   
-  // Create recognition instance
   const recognition = new SpeechRecognition();
   recognition.continuous = false;
   recognition.interimResults = true;
-  recognition.lang = 'en-US'; // Default to English
+  recognition.lang = 'en-US';
   
-  // Set state to listening
   onStateChange(ListeningState.LISTENING);
   
-  // Event handlers
   recognition.onresult = (event) => {
     const transcript = Array.from(event.results)
       .map(result => result[0].transcript)
@@ -97,10 +128,8 @@ export const startListening = (
     onStateChange(ListeningState.INACTIVE);
   };
   
-  // Start listening
   recognition.start();
   
-  // Return stop function
   return {
     stop: () => {
       recognition.stop();
