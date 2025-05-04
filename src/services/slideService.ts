@@ -26,6 +26,8 @@ class SlideService {
   private currentSlideIndex: number = 0;
   private isPlaying: boolean = false;
   private isSpeakingEnabled: boolean = true;
+  private currentChunkIndex: number = 0;
+  private textChunks: string[] = [];
 
   initialize(apiKey: string): void {
     if (!apiKey) {
@@ -48,18 +50,26 @@ class SlideService {
 
     const prompt = `
       Create an educational presentation about "${topic}" for ${level} level students.
-      Include visual descriptions and engaging content.
+      The presentation should include:
+      1. A clear title and description
+      2. 5-7 slides that build upon each other
+      3. For each slide:
+         - Detailed content in markdown format
+         - A natural speaking script
+         - A relevant visual aid description
+         - Appropriate duration (30-60 seconds)
+      
       Format as JSON with:
       {
         "title": "Presentation title",
         "description": "Brief overview",
         "slides": [
           {
-            "id": "unique_id",
-            "content": "Slide content in markdown",
+            "id": "slide_1",
+            "content": "Markdown content",
             "narration": "Natural speaking script",
-            "duration": seconds_for_slide,
-            "visualAid": "Description of visual aid or diagram"
+            "duration": 45,
+            "visualAid": "Description for visual"
           }
         ]
       }
@@ -96,6 +106,38 @@ class SlideService {
     }
   }
 
+  private splitTextIntoChunks(text: string): string[] {
+    // Split text into sentences and group them into chunks
+    const sentences = text.match(/[^.!?]+[.!?]+/g) || [text];
+    const chunks: string[] = [];
+    let currentChunk = '';
+    
+    for (const sentence of sentences) {
+      if (currentChunk.length + sentence.length < 200) {
+        currentChunk += sentence;
+      } else {
+        if (currentChunk) chunks.push(currentChunk);
+        currentChunk = sentence;
+      }
+    }
+    if (currentChunk) chunks.push(currentChunk);
+    
+    return chunks;
+  }
+
+  private speakCurrentChunk(): void {
+    if (!this.isPlaying || !this.isSpeakingEnabled || this.currentChunkIndex >= this.textChunks.length) {
+      return;
+    }
+
+    speak(this.textChunks[this.currentChunkIndex], () => {
+      this.currentChunkIndex++;
+      if (this.currentChunkIndex < this.textChunks.length) {
+        this.speakCurrentChunk();
+      }
+    });
+  }
+
   startPresentation(
     presentation: SlidePresentation,
     onSlideChange: (slideIndex: number) => void,
@@ -113,18 +155,20 @@ class SlideService {
       const currentTime = this.currentPresentation.currentTime;
       onTimeUpdate(currentTime);
 
-      // Calculate accumulated duration up to current slide
       let accumulatedDuration = 0;
       for (let i = 0; i <= this.currentSlideIndex; i++) {
         accumulatedDuration += this.currentPresentation.slides[i].duration;
       }
 
-      // Check if we need to move to the next slide
       if (currentTime >= accumulatedDuration && this.currentSlideIndex < this.currentPresentation.slides.length - 1) {
         this.currentSlideIndex++;
         onSlideChange(this.currentSlideIndex);
+        
         if (this.isSpeakingEnabled) {
-          speak(this.currentPresentation.slides[this.currentSlideIndex].narration);
+          const narration = this.currentPresentation.slides[this.currentSlideIndex].narration;
+          this.textChunks = this.splitTextIntoChunks(narration);
+          this.currentChunkIndex = 0;
+          this.speakCurrentChunk();
         }
       }
 
@@ -134,7 +178,10 @@ class SlideService {
 
     // Start presentation
     if (this.isSpeakingEnabled) {
-      speak(presentation.slides[0].narration);
+      const narration = presentation.slides[0].narration;
+      this.textChunks = this.splitTextIntoChunks(narration);
+      this.currentChunkIndex = 0;
+      this.speakCurrentChunk();
     }
     updatePresentation();
   }
@@ -156,7 +203,10 @@ class SlideService {
 
     this.isPlaying = true;
     if (this.isSpeakingEnabled) {
-      speak(this.currentPresentation.slides[this.currentSlideIndex].narration);
+      const narration = this.currentPresentation.slides[this.currentSlideIndex].narration;
+      this.textChunks = this.splitTextIntoChunks(narration);
+      this.currentChunkIndex = 0;
+      this.speakCurrentChunk();
     }
     
     this.startPresentation(
@@ -186,7 +236,10 @@ class SlideService {
     
     if (this.isPlaying && this.isSpeakingEnabled) {
       stopSpeaking();
-      speak(this.currentPresentation.slides[slideIndex].narration);
+      const narration = this.currentPresentation.slides[slideIndex].narration;
+      this.textChunks = this.splitTextIntoChunks(narration);
+      this.currentChunkIndex = 0;
+      this.speakCurrentChunk();
     }
     
     return slideIndex;
@@ -197,7 +250,10 @@ class SlideService {
     if (!enabled) {
       stopSpeaking();
     } else if (this.isPlaying && this.currentPresentation) {
-      speak(this.currentPresentation.slides[this.currentSlideIndex].narration);
+      const narration = this.currentPresentation.slides[this.currentSlideIndex].narration;
+      this.textChunks = this.splitTextIntoChunks(narration);
+      this.currentChunkIndex = 0;
+      this.speakCurrentChunk();
     }
   }
 }

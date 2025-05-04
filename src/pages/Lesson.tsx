@@ -8,7 +8,6 @@ import geminiService from '../services/geminiService';
 import slideService from '../services/slideService';
 import SlidePresentation from '../components/tutorial/SlidePresentation';
 import Transcript from '../components/tutorial/Transcript';
-import Quiz from '../components/tutorial/Quiz';
 import type { SlidePresentation as SlidePresentationType } from '../services/slideService';
 
 interface Caption {
@@ -32,7 +31,6 @@ const Lesson: React.FC = () => {
   const [isAnswering, setIsAnswering] = useState(false);
   const [isSpeakingEnabled, setIsSpeakingEnabled] = useState(true);
   const [currentTime, setCurrentTime] = useState(0);
-  const [showQuiz, setShowQuiz] = useState(false);
   const [captions, setCaptions] = useState<Caption[]>([]);
 
   // Load presentation content
@@ -76,16 +74,6 @@ const Lesson: React.FC = () => {
 
   const handleTimeUpdate = (time: number) => {
     setCurrentTime(time);
-    
-    // Show quiz every 5 minutes
-    if (Math.floor(time) % 300 === 0) {
-      setShowQuiz(true);
-    }
-  };
-
-  const handleQuizComplete = (correct: boolean) => {
-    setShowQuiz(false);
-    // You could track progress here
   };
 
   const handleAskQuestion = async () => {
@@ -198,30 +186,6 @@ const Lesson: React.FC = () => {
                 isSpeakingEnabled={isSpeakingEnabled}
                 onTimeUpdate={handleTimeUpdate}
               />
-
-              {/* Quiz Modal */}
-              <AnimatePresence>
-                {showQuiz && (
-                  <motion.div
-                    initial={{ opacity: 0, scale: 0.95 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0, scale: 0.95 }}
-                    className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
-                  >
-                    <Quiz
-                      question="What was the main concept covered in this section?"
-                      options={[
-                        "Option A",
-                        "Option B",
-                        "Option C",
-                        "Option D"
-                      ]}
-                      correctAnswer={0}
-                      onComplete={handleQuizComplete}
-                    />
-                  </motion.div>
-                )}
-              </AnimatePresence>
             </div>
 
             {/* Transcript */}
