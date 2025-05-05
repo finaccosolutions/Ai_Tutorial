@@ -1,18 +1,23 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Key, Info, AlertCircle, Loader2, RefreshCw, Trash2, Home, MessageSquare } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
 const ApiKeySetup: React.FC = () => {
-  const { updateGeminiApiKey, geminiApiKey } = useAuth();
+  const { updateGeminiApiKey, geminiApiKey, user } = useAuth();
   const navigate = useNavigate();
   const [apiKey, setApiKey] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  
-  const existingKey = geminiApiKey;
+
+  useEffect(() => {
+    // If user has API key, redirect to dashboard
+    if (geminiApiKey) {
+      navigate('/dashboard');
+    }
+  }, [geminiApiKey, navigate]);
 
   const saveApiKey = async () => {
     if (!apiKey.trim()) return;
@@ -64,12 +69,10 @@ const ApiKeySetup: React.FC = () => {
                 <Key className="w-8 h-8 text-blue-600" />
               </div>
               <h2 className="text-2xl font-bold text-gray-900 mb-2">
-                {existingKey ? 'Update Your Gemini API Key' : 'Set Up Your Gemini API Key'}
+                Set Up Your Gemini API Key
               </h2>
               <p className="text-gray-600">
-                {existingKey 
-                  ? 'Update or remove your existing Gemini API key'
-                  : 'Enter your Gemini API key to start using the AI assistant'}
+                Enter your Gemini API key to start using the AI assistant
               </p>
             </div>
 
@@ -129,59 +132,20 @@ const ApiKeySetup: React.FC = () => {
                   </>
                 ) : (
                   <>
-                    {existingKey ? (
-                      <>
-                        <RefreshCw className="w-5 h-5" />
-                        Update API Key
-                      </>
-                    ) : (
-                      <>
-                        <Key className="w-5 h-5" />
-                        Save API Key
-                      </>
-                    )}
+                    <Key className="w-5 h-5" />
+                    Save API Key
                   </>
                 )}
               </button>
 
-              {existingKey && (
-                <button
-                  onClick={deleteApiKey}
-                  disabled={deleting}
-                  className="w-full bg-red-50 text-red-600 font-medium py-3 px-4 rounded-lg hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 border border-red-200"
-                >
-                  {deleting ? (
-                    <>
-                      <Loader2 className="w-5 h-5 animate-spin" />
-                      Deleting...
-                    </>
-                  ) : (
-                    <>
-                      <Trash2 className="w-5 h-5" />
-                      Delete API Key
-                    </>
-                  )}
-                </button>
-              )}
-
               <div className="flex gap-4 mt-6">
-                {existingKey ? (
-                  <Link
-                    to="/dashboard"
-                    className="flex-1 bg-blue-50 text-blue-600 font-medium py-3 px-4 rounded-lg hover:bg-blue-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 flex items-center justify-center gap-2 border border-blue-200"
-                  >
-                    <MessageSquare className="w-5 h-5" />
-                    Go to Dashboard
-                  </Link>
-                ) : (
-                  <Link
-                    to="/"
-                    className="flex-1 bg-gray-50 text-gray-600 font-medium py-3 px-4 rounded-lg hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 flex items-center justify-center gap-2 border border-gray-200"
-                  >
-                    <Home className="w-5 h-5" />
-                    Back to Home
-                  </Link>
-                )}
+                <Link
+                  to="/"
+                  className="flex-1 bg-gray-50 text-gray-600 font-medium py-3 px-4 rounded-lg hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 flex items-center justify-center gap-2 border border-gray-200"
+                >
+                  <Home className="w-5 h-5" />
+                  Back to Home
+                </Link>
               </div>
             </div>
 

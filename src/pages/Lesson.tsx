@@ -2,9 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowLeft, Volume2, VolumeX, MessageSquare, X, AlertCircle } from 'lucide-react';
-import { useUserPreferences } from '../contexts/UserPreferencesContext';
 import { useAuth } from '../contexts/AuthContext';
-import geminiService from '../services/geminiService';
+import { useUserPreferences } from '../contexts/UserPreferencesContext';
+import geminiService, { Topic } from '../services/geminiService';
 import slideService from '../services/slideService';
 import SlidePresentation from '../components/tutorial/SlidePresentation';
 import Quiz from '../components/tutorial/Quiz';
@@ -17,6 +17,7 @@ const Lesson: React.FC = () => {
   const navigate = useNavigate();
   
   const [presentation, setPresentation] = useState<SlidePresentationType | null>(null);
+  const [selectedTopic, setSelectedTopic] = useState<Topic | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showChat, setShowChat] = useState(false);
@@ -30,8 +31,19 @@ const Lesson: React.FC = () => {
   const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
 
   useEffect(() => {
+    // Load the selected topic from localStorage
+    const storedTopic = localStorage.getItem('selectedTopic');
+    if (storedTopic) {
+      setSelectedTopic(JSON.parse(storedTopic));
+    } else {
+      navigate('/dashboard');
+      return;
+    }
+  }, [navigate]);
+
+  useEffect(() => {
     const loadPresentation = async () => {
-      if (!lessonId || !preferences?.subject || !preferences?.knowledgeLevel || !geminiApiKey) {
+      if (!selectedTopic || !preferences?.subject || !preferences?.knowledgeLevel || !geminiApiKey) {
         return;
       }
 
@@ -41,10 +53,10 @@ const Lesson: React.FC = () => {
       try {
         slideService.initialize(geminiApiKey);
         const generatedPresentation = await slideService.generateSlidePresentation(
-          preferences.subject,
+          selectedTopic.title,
           preferences.knowledgeLevel,
           preferences.language,
-          preferences.learningGoals
+          selectedTopic.learningObjectives
         );
         setPresentation(generatedPresentation);
       } catch (error: any) {
@@ -56,7 +68,7 @@ const Lesson: React.FC = () => {
     };
 
     loadPresentation();
-  }, [lessonId, preferences, geminiApiKey]);
+  }, [selectedTopic, preferences, geminiApiKey]);
 
   const handleTimeUpdate = (time: number) => {
     setCurrentTime(time);
@@ -80,7 +92,7 @@ const Lesson: React.FC = () => {
   };
 
   const handleAskQuestion = async () => {
-    if (!question.trim() || !preferences?.subject) return;
+    if (!question.trim() || !selectedTopic) return;
     
     setIsAnswering(true);
     setAnswer(null);
@@ -88,8 +100,9 @@ const Lesson: React.FC = () => {
     try {
       const response = await geminiService.answerQuestion(
         question,
-        preferences.subject,
-        preferences.knowledgeLevel
+        selectedTopic.title,
+        preferences?.knowledgeLevel || 'beginner',
+        preferences?.language || 'english'
       );
       setAnswer(response);
     } catch (error: any) {
@@ -116,7 +129,7 @@ const Lesson: React.FC = () => {
     );
   }
 
-  if (error || !presentation) {
+  if (error || !presentation || !selectedTopic) {
     return (
       <div className="min-h-screen bg-neutral-50 flex items-center justify-center">
         <div className="max-w-lg mx-auto px-4 py-8 text-center">
@@ -196,7 +209,7 @@ const Lesson: React.FC = () => {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5 }}
           >
-            <h1 className="text-3xl font-bold text-neutral-800 mb-8">{presentation.title}</h1>
+            <h1 className="text-3xl font-bold text-neutral-800 mb-8">{selectedTopic.title}</h1>
             
             <div className="space-y-8">
               <SlidePresentation

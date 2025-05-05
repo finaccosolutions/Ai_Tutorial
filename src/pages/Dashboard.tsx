@@ -15,6 +15,14 @@ const Dashboard: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   
+  // Check if API key is set
+  useEffect(() => {
+    if (!geminiApiKey) {
+      navigate('/api-key-setup');
+      return;
+    }
+  }, [geminiApiKey, navigate]);
+  
   // Check if onboarding is complete
   useEffect(() => {
     if (preferences && !preferences.onboardingCompleted) {
@@ -24,15 +32,17 @@ const Dashboard: React.FC = () => {
   
   // Load topics based on user preferences
   useEffect(() => {
-    if (!geminiApiKey) {
-      navigate('/api-key-setup');
+    const storedTopics = localStorage.getItem('learningTopics');
+    if (storedTopics) {
+      setTopics(JSON.parse(storedTopics));
+      setIsLoading(false);
       return;
     }
 
     if (preferences?.subject && preferences?.knowledgeLevel && preferences?.language) {
       loadTopics();
     }
-  }, [preferences?.subject, preferences?.knowledgeLevel, preferences?.language, geminiApiKey]);
+  }, [preferences?.subject, preferences?.knowledgeLevel, preferences?.language]);
 
   const loadTopics = async () => {
     if (!preferences?.subject || !preferences?.knowledgeLevel || !preferences?.language) return;
@@ -47,12 +57,20 @@ const Dashboard: React.FC = () => {
         preferences.learningGoals || []
       );
       setTopics(topics);
+      // Store topics in localStorage
+      localStorage.setItem('learningTopics', JSON.stringify(topics));
     } catch (error: any) {
       console.error('Error loading topics:', error);
       setError(error.message || 'Failed to load topics. Please try again.');
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleStartLesson = (topic: Topic) => {
+    // Store the selected topic in localStorage
+    localStorage.setItem('selectedTopic', JSON.stringify(topic));
+    navigate(`/lesson/${topic.id}`);
   };
 
   if (isLoading) {
@@ -109,7 +127,16 @@ const Dashboard: React.FC = () => {
         <div className="grid grid-cols-1 gap-8">
           {/* Topics List */}
           <div>
-            <h2 className="text-2xl font-semibold text-neutral-800 mb-6">Your Learning Path</h2>
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-2xl font-semibold text-neutral-800">Your Learning Path</h2>
+              <button
+                onClick={loadTopics}
+                className="btn btn-secondary flex items-center gap-2"
+              >
+                <RefreshCw className="w-4 h-4" />
+                Refresh Topics
+              </button>
+            </div>
             
             {error ? (
               <div className="bg-error-50 border border-error-200 text-error-700 p-4 rounded-lg mb-6">
@@ -142,7 +169,7 @@ const Dashboard: React.FC = () => {
                           </p>
                         </div>
                         <button
-                          onClick={() => navigate(`/lesson/${topic.id}`)}
+                          onClick={() => handleStartLesson(topic)}
                           className="flex items-center gap-2 bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700 transition-colors ml-4"
                         >
                           <Play className="h-4 w-4" />
