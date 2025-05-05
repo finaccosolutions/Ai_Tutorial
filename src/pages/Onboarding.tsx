@@ -25,16 +25,6 @@ const Onboarding: React.FC = () => {
   const [learningGoals, setLearningGoals] = useState<string[]>([]);
   const [customGoal, setCustomGoal] = useState('');
   
-  // Load any existing preferences
-  useEffect(() => {
-    if (preferences) {
-      setSubject(preferences.subject || '');
-      setKnowledgeLevel(preferences.knowledgeLevel || 'beginner');
-      setLanguage(preferences.language || 'english');
-      setLearningGoals(preferences.learningGoals || []);
-    }
-  }, [preferences]);
-  
   // Common goals options
   const commonGoals = [
     'Master the fundamentals',
@@ -98,27 +88,29 @@ const Onboarding: React.FC = () => {
     setIsSubmitting(true);
     
     try {
-      // Update all preferences
-      await updatePreferences({
+      // Update preferences locally first
+      const newPreferences = {
         subject,
         knowledgeLevel,
         language,
         learningGoals,
         onboardingCompleted: true
-      });
+      };
       
-      // Save to storage
+      // Update context
+      await updatePreferences(newPreferences);
+      
+      // Save to database
       await savePreferences();
       
       // Navigate to dashboard
       navigate('/dashboard');
     } catch (error) {
       console.error('Error saving preferences:', error);
-    } finally {
       setIsSubmitting(false);
     }
   };
-  
+
   // Step content based on current step
   const renderStepContent = () => {
     switch (currentStep) {

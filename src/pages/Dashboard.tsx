@@ -1,20 +1,22 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Play, BookOpen, User2, Settings, Clock, Target, Award, RefreshCw } from 'lucide-react';
+import { Play, BookOpen, User2, Settings, Clock, Target, Award, RefreshCw, Edit } from 'lucide-react';
 import { useUserPreferences } from '../contexts/UserPreferencesContext';
 import { useAuth } from '../contexts/AuthContext';
 import geminiService, { Topic } from '../services/geminiService';
 
 const Dashboard: React.FC = () => {
-  const { preferences } = useUserPreferences();
+  const { preferences, updatePreferences, savePreferences } = useUserPreferences();
   const { geminiApiKey } = useAuth();
   const navigate = useNavigate();
   
   const [topics, setTopics] = useState<Topic[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [isChangingPreferences, setIsChangingPreferences] = useState(false);
+  const [showPreferencesModal, setShowPreferencesModal] = useState(false);
+  const [editedPreferences, setEditedPreferences] = useState(preferences);
+  const [isSaving, setIsSaving] = useState(false);
   
   // Check if API key is set
   useEffect(() => {
@@ -39,15 +41,6 @@ const Dashboard: React.FC = () => {
       setIsLoading(true);
       setError(null);
       try {
-        // Try to load cached topics first
-        const cachedTopics = localStorage.getItem(`topics_${preferences.subject}`);
-        if (cachedTopics && !isChangingPreferences) {
-          setTopics(JSON.parse(cachedTopics));
-          setIsLoading(false);
-          return;
-        }
-
-        // Generate new topics if cache doesn't exist or preferences changed
         const topics = await geminiService.generateTopicsList(
           preferences.subject,
           preferences.knowledgeLevel,
@@ -56,9 +49,6 @@ const Dashboard: React.FC = () => {
         );
         
         setTopics(topics);
-        // Cache the topics
-        localStorage.setItem(`topics_${preferences.subject}`, JSON.stringify(topics));
-        setIsChangingPreferences(false);
       } catch (error: any) {
         console.error('Error loading topics:', error);
         setError(error.message || 'Failed to load topics. Please try again.');
@@ -68,17 +58,115 @@ const Dashboard: React.FC = () => {
     };
 
     loadTopics();
-  }, [preferences?.subject, preferences?.knowledgeLevel, preferences?.language, isChangingPreferences]);
+  }, [preferences?.subject, preferences?.knowledgeLevel, preferences?.language]);
 
   const handleStartLesson = (topic: Topic) => {
     localStorage.setItem('selectedTopic', JSON.stringify(topic));
     navigate(`/lesson/${topic.id}`);
   };
 
-  const handleChangePreferences = () => {
-    setIsChangingPreferences(true);
-    navigate('/onboarding');
+  const handleSavePreferences = async () => {
+    if (!editedPreferences) return;
+    
+    setIsSaving(true);
+    try {
+      await updatePreferences(editedPreferences);
+      await savePreferences();
+      setShowPreferencesModal(false);
+    } catch (error) {
+      console.error('Error saving preferences:', error);
+      setError('Failed to save preferences. Please try again.');
+    } finally {
+      setIsSaving(false);
+    }
   };
+
+  const PreferencesModal = () => (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.95 }}
+        className="bg-white rounded-xl shadow-xl p-6 max-w-lg w-full mx-4"
+      >
+        <h2 className="text-2xl font-semibold mb-4">Update Learning Preferences</h2>
+        
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-neutral-700 mb-1">
+              Subject
+            </label>
+            <input
+              type="text"
+              value={editedPreferences?.subject || ''}
+              onChange={(e) => setEditedPreferences(prev => ({
+                ...prev!,
+                subject: e.target.value
+              }))}
+              className="input"
+              placeholder="e.g., Python Programming"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-neutral-700 mb-1">
+              Knowledge Level
+            </label>
+            <select
+              value={editedPreferences?.knowledgeLevel || 'beginner'}
+              onChange={(e) => setEditedPreferences(prev => ({
+                ...prev!,
+                knowledgeLevel: e.target.value as any
+              }))}
+              className="input"
+            >
+              <option value="beginner">Beginner</option>
+              <option value="intermediate">Intermediate</option>
+              <option value="advanced">Advanced</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-neutral-700 mb-1">
+              Language
+            </label>
+            <select
+              value={editedPreferences?.language || 'english'}
+              onChange={(e) => setEditedPreferences(prev => ({
+                ...prev!,
+                language: e.target.value as any
+              }))}
+              className="input"
+            >
+              <option value="english">English</option>
+              <option value="spanish">Spanish</option>
+              <option value="french">French</option>
+              <option value="german">German</option>
+              <option value="chinese">Chinese</option>
+              <option value="japanese">Japanese</option>
+              <option value="hindi">Hindi</option>
+            </select>
+          </div>
+        </div>
+
+        <div className="mt-6 flex justify-end gap-3">
+          <button
+            onClick={() => setShowPreferencesModal(false)}
+            className="btn btn-secondary"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSavePreferences}
+            disabled={isSaving}
+            className="btn btn-primary"
+          >
+            {isSaving ? 'Saving...' : 'Save Changes'}
+          </button>
+        </div>
+      </motion.div>
+    </div>
+  );
 
   if (isLoading) {
     return (
@@ -102,12 +190,27 @@ const Dashboard: React.FC = () => {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5 }}
           >
-            <h1 className="text-3xl md:text-4xl font-bold mb-3">
-              Welcome to Your Learning Journey
-            </h1>
-            <p className="text-primary-100 text-lg max-w-3xl">
-              Your personalized learning path in {preferences?.subject}
-            </p>
+            <div className="flex justify-between items-start">
+              <div>
+                <h1 className="text-3xl md:text-4xl font-bold mb-3">
+                  Welcome to Your Learning Journey
+                </h1>
+                <p className="text-primary-100 text-lg max-w-3xl">
+                  Your personalized learning path in {preferences?.subject}
+                </p>
+              </div>
+              
+              <button
+                onClick={() => {
+                  setEditedPreferences(preferences);
+                  setShowPreferencesModal(true);
+                }}
+                className="bg-white/10 hover:bg-white/20 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors"
+              >
+                <Edit className="h-4 w-4" />
+                Edit Preferences
+              </button>
+            </div>
             
             <div className="mt-6 flex flex-wrap gap-4">
               <div className="bg-white/10 backdrop-blur-sm rounded-lg px-4 py-3 flex items-center">
@@ -136,13 +239,6 @@ const Dashboard: React.FC = () => {
           <div>
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-2xl font-semibold text-neutral-800">Your Learning Path</h2>
-              <button
-                onClick={handleChangePreferences}
-                className="btn btn-secondary flex items-center gap-2"
-              >
-                <RefreshCw className="w-4 h-4" />
-                Change Preferences
-              </button>
             </div>
             
             {error ? (
@@ -227,6 +323,9 @@ const Dashboard: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Preferences Modal */}
+      {showPreferencesModal && <PreferencesModal />}
     </div>
   );
 };
