@@ -1,6 +1,5 @@
 import React, { createContext, useContext, useState, useCallback } from 'react';
 import { useUserPreferences } from './UserPreferencesContext';
-import geminiService from '../services/geminiService';
 
 // Types
 export interface Lesson {
@@ -48,8 +47,102 @@ interface LessonContextType {
   askQuestion: (question: string) => Promise<void>;
 }
 
+// Create context
 const LessonContext = createContext<LessonContextType | undefined>(undefined);
 
+// Mock data generation based on user preferences
+const generateMockCourse = (subject: string, level: string): Course => {
+  return {
+    id: `course_${Date.now()}`,
+    title: `${level.charAt(0).toUpperCase() + level.slice(1)} ${subject}`,
+    description: `A comprehensive course on ${subject} designed for ${level} learners.`,
+    subject,
+    knowledgeLevel: level,
+    lessons: [
+      {
+        id: 'lesson1',
+        title: 'Introduction to the Subject',
+        content: `
+          <h1>Introduction to ${subject}</h1>
+          <p>This lesson will introduce you to the fundamental concepts of ${subject}.</p>
+          <p>We'll cover the basic terminology, history, and application areas.</p>
+          <h2>Key Topics</h2>
+          <ul>
+            <li>Definition and scope of ${subject}</li>
+            <li>Historical development</li>
+            <li>Modern applications</li>
+            <li>Future trends</li>
+          </ul>
+          <p>By the end of this lesson, you'll have a solid understanding of what ${subject} is and why it's important.</p>
+        `,
+        visualContent: 'https://images.pexels.com/photos/3184291/pexels-photo-3184291.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=750&w=1260',
+        estimatedDuration: 15,
+        progress: 0,
+        completed: false,
+        questions: []
+      },
+      {
+        id: 'lesson2',
+        title: 'Core Principles',
+        content: `
+          <h1>Core Principles of ${subject}</h1>
+          <p>In this lesson, we'll explore the foundational principles that govern ${subject}.</p>
+          <p>Understanding these principles is crucial for mastering more advanced concepts later.</p>
+          <h2>Principles We'll Cover</h2>
+          <ol>
+            <li>First principle of ${subject}</li>
+            <li>Second principle</li>
+            <li>Third principle</li>
+            <li>How these principles interact</li>
+          </ol>
+          <p>These principles form the backbone of all work in ${subject}.</p>
+        `,
+        visualContent: 'https://images.pexels.com/photos/6238297/pexels-photo-6238297.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=750&w=1260',
+        estimatedDuration: 20,
+        progress: 0,
+        completed: false,
+        questions: []
+      },
+      {
+        id: 'lesson3',
+        title: 'Practical Applications',
+        content: `
+          <h1>Practical Applications of ${subject}</h1>
+          <p>Now that we understand the theory, let's explore how ${subject} is applied in the real world.</p>
+          <p>We'll look at case studies and examples from various industries.</p>
+          <h2>Application Areas</h2>
+          <ul>
+            <li>Industry applications</li>
+            <li>Research applications</li>
+            <li>Everyday applications</li>
+            <li>Emerging use cases</li>
+          </ul>
+          <p>By seeing ${subject} in action, you'll gain a deeper appreciation for its importance.</p>
+        `,
+        visualContent: 'https://images.pexels.com/photos/4050315/pexels-photo-4050315.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=750&w=1260',
+        estimatedDuration: 25,
+        progress: 0,
+        completed: false,
+        questions: []
+      }
+    ],
+    progress: 0
+  };
+};
+
+// Mock Gemini API response for questions
+const mockGeminiAnswer = async (question: string, subject: string): Promise<string> => {
+  // Simulate API delay
+  await new Promise(resolve => setTimeout(resolve, 1500));
+  
+  return `This is a simulated answer about ${subject} for your question: "${question}".
+  
+In a real implementation, this would use the Gemini API to generate a detailed and accurate response based on your specific question and the current lesson content.
+
+The answer would be tailored to your knowledge level and would seamlessly connect back to the lesson material.`;
+};
+
+// Provider component
 export const LessonProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { preferences } = useUserPreferences();
   const [currentCourse, setCurrentCourse] = useState<Course | null>(null);
@@ -60,56 +153,29 @@ export const LessonProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [isListening, setIsListening] = useState(false);
   const [currentQuestion, setCurrentQuestion] = useState('');
   const [currentAnswer, setCurrentAnswer] = useState<string | null>(null);
-  const [cachedTopics, setCachedTopics] = useState<Topic[]>([]);
 
   // Load course based on user preferences
-  const loadCourse = useCallback(async (forceReload = false) => {
+  const loadCourse = useCallback(async () => {
     if (!preferences) return;
-    
-    // Return cached topics if available and not forcing reload
-    if (cachedTopics.length > 0 && !forceReload) {
-      return;
-    }
     
     setIsLoading(true);
     try {
-      const topics = await geminiService.generateTopicsList(
-        preferences.subject || 'General Knowledge',
-        preferences.knowledgeLevel,
-        preferences.language,
-        preferences.learningGoals || []
+      // In a real app, this would call the Gemini API to generate course content
+      // based on the user's preferences
+      await new Promise(resolve => setTimeout(resolve, 1500)); // Simulate API call
+      
+      const mockCourse = generateMockCourse(
+        preferences.subject || 'General Knowledge', 
+        preferences.knowledgeLevel
       );
       
-      setCachedTopics(topics);
-      setCurrentCourse({
-        id: `course_${Date.now()}`,
-        title: `${preferences.knowledgeLevel} ${preferences.subject}`,
-        description: `A comprehensive course on ${preferences.subject}`,
-        subject: preferences.subject || '',
-        knowledgeLevel: preferences.knowledgeLevel,
-        lessons: topics.map(topic => ({
-          id: topic.id,
-          title: topic.title,
-          content: topic.description,
-          visualContent: '',
-          estimatedDuration: topic.estimatedDuration,
-          progress: 0,
-          completed: false,
-          questions: []
-        })),
-        progress: 0
-      });
+      setCurrentCourse(mockCourse);
     } catch (error) {
       console.error('Error loading course:', error);
     } finally {
       setIsLoading(false);
     }
-  }, [preferences, cachedTopics]);
-
-  // Clear cached topics when preferences change
-  React.useEffect(() => {
-    setCachedTopics([]);
-  }, [preferences?.subject, preferences?.knowledgeLevel, preferences?.language]);
+  }, [preferences]);
 
   // Load specific lesson
   const loadLesson = useCallback(async (lessonId: string) => {
@@ -193,8 +259,7 @@ export const LessonProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       togglePause,
       toggleSpeaking,
       toggleListening,
-      askQuestion,
-      cachedTopics
+      askQuestion
     }}>
       {children}
     </LessonContext.Provider>

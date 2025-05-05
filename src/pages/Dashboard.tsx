@@ -1,16 +1,22 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Play, BookOpen, User2, Settings, Clock, Target, Award, RefreshCw, Edit } from 'lucide-react';
 import { useUserPreferences } from '../contexts/UserPreferencesContext';
 import { useAuth } from '../contexts/AuthContext';
-import { useLesson } from '../contexts/LessonContext';
+import geminiService, { Topic } from '../services/geminiService';
 
 const Dashboard: React.FC = () => {
-  const { preferences } = useUserPreferences();
+  const { preferences, updatePreferences, savePreferences } = useUserPreferences();
   const { geminiApiKey } = useAuth();
   const navigate = useNavigate();
-  const { currentCourse, loadCourse, isLoading, cachedTopics } = useLesson();
+  
+  const [topics, setTopics] = useState<Topic[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [showPreferencesModal, setShowPreferencesModal] = useState(false);
+  const [editedPreferences, setEditedPreferences] = useState(preferences);
+  const [isSaving, setIsSaving] = useState(false);
   
   // Check if API key is set
   useEffect(() => {
@@ -31,16 +37,136 @@ const Dashboard: React.FC = () => {
   useEffect(() => {
     if (!preferences?.subject || !preferences?.knowledgeLevel || !preferences?.language) return;
 
-    // Only load if no cached topics
-    if (cachedTopics.length === 0) {
-      loadCourse();
-    }
-  }, [preferences?.subject, preferences?.knowledgeLevel, preferences?.language, cachedTopics.length, loadCourse]);
+    const loadTopics = async () => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        const topics = await geminiService.generateTopicsList(
+          preferences.subject,
+          preferences.knowledgeLevel,
+          preferences.language,
+          preferences.learningGoals || []
+        );
+        
+        setTopics(topics);
+      } catch (error: any) {
+        console.error('Error loading topics:', error);
+        setError(error.message || 'Failed to load topics. Please try again.');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadTopics();
+  }, [preferences?.subject, preferences?.knowledgeLevel, preferences?.language]);
 
   const handleStartLesson = (topic: Topic) => {
     localStorage.setItem('selectedTopic', JSON.stringify(topic));
     navigate(`/lesson/${topic.id}`);
   };
+
+  const handleSavePreferences = async () => {
+    if (!editedPreferences) return;
+    
+    setIsSaving(true);
+    try {
+      await updatePreferences(editedPreferences);
+      await savePreferences();
+      setShowPreferencesModal(false);
+    } catch (error) {
+      console.error('Error saving preferences:', error);
+      setError('Failed to save preferences. Please try again.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const PreferencesModal = () => (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.95 }}
+        className="bg-white rounded-xl shadow-xl p-6 max-w-lg w-full mx-4"
+      >
+        <h2 className="text-2xl font-semibold mb-4">Update Learning Preferences</h2>
+        
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-neutral-700 mb-1">
+              Subject
+            </label>
+            <input
+              type="text"
+              value={editedPreferences?.subject || ''}
+              onChange={(e) => setEditedPreferences(prev => ({
+                ...prev!,
+                subject: e.target.value
+              }))}
+              className="input"
+              placeholder="e.g., Python Programming"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-neutral-700 mb-1">
+              Knowledge Level
+            </label>
+            <select
+              value={editedPreferences?.knowledgeLevel || 'beginner'}
+              onChange={(e) => setEditedPreferences(prev => ({
+                ...prev!,
+                knowledgeLevel: e.target.value as any
+              }))}
+              className="input"
+            >
+              <option value="beginner">Beginner</option>
+              <option value="intermediate">Intermediate</option>
+              <option value="advanced">Advanced</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-neutral-700 mb-1">
+              Language
+            </label>
+            <select
+              value={editedPreferences?.language || 'english'}
+              onChange={(e) => setEditedPreferences(prev => ({
+                ...prev!,
+                language: e.target.value as any
+              }))}
+              className="input"
+            >
+              <option value="english">English</option>
+              <option value="spanish">Spanish</option>
+              <option value="french">French</option>
+              <option value="german">German</option>
+              <option value="chinese">Chinese</option>
+              <option value="japanese">Japanese</option>
+              <option value="hindi">Hindi</option>
+            </select>
+          </div>
+        </div>
+
+        <div className="mt-6 flex justify-end gap-3">
+          <button
+            onClick={() => setShowPreferencesModal(false)}
+            className="btn btn-secondary"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSavePreferences}
+            disabled={isSaving}
+            className="btn btn-primary"
+          >
+            {isSaving ? 'Saving...' : 'Save Changes'}
+          </button>
+        </div>
+      </motion.div>
+    </div>
+  );
 
   if (isLoading) {
     return (
@@ -75,7 +201,10 @@ const Dashboard: React.FC = () => {
               </div>
               
               <button
-                onClick={() => navigate('/preferences')}
+                onClick={() => {
+                  setEditedPreferences(preferences);
+                  setShowPreferencesModal(true);
+                }}
                 className="bg-white/10 hover:bg-white/20 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors"
               >
                 <Edit className="h-4 w-4" />
@@ -112,82 +241,91 @@ const Dashboard: React.FC = () => {
               <h2 className="text-2xl font-semibold text-neutral-800">Your Learning Path</h2>
             </div>
             
-            <div className="grid gap-6">
-              {cachedTopics.map((topic, index) => (
-                <motion.div
-                  key={topic.id}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: index * 0.1 }}
-                  className="bg-white rounded-lg border border-neutral-200 p-6 hover:border-primary-300 transition-all hover:shadow-md"
-                >
-                  <div className="space-y-4">
-                    <div className="flex justify-between items-start">
-                      <div className="flex-grow">
-                        <h3 className="text-xl font-semibold text-neutral-800 mb-2">
-                          {topic.title}
-                        </h3>
-                        <p className="text-neutral-600 mb-4">
-                          {topic.description}
-                        </p>
+            {error ? (
+              <div className="bg-error-50 border border-error-200 text-error-700 p-4 rounded-lg mb-6">
+                {error}
+              </div>
+            ) : (
+              <div className="grid gap-6">
+                {topics.map((topic, index) => (
+                  <motion.div
+                    key={topic.id}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: index * 0.1 }}
+                    className="bg-white rounded-lg border border-neutral-200 p-6 hover:border-primary-300 transition-all hover:shadow-md"
+                  >
+                    <div className="space-y-4">
+                      <div className="flex justify-between items-start">
+                        <div className="flex-grow">
+                          <h3 className="text-xl font-semibold text-neutral-800 mb-2">
+                            {topic.title}
+                          </h3>
+                          <p className="text-neutral-600 mb-4">
+                            {topic.description}
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => handleStartLesson(topic)}
+                          className="flex items-center gap-2 bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700 transition-colors ml-4"
+                        >
+                          <Play className="h-4 w-4" />
+                          Start
+                        </button>
                       </div>
-                      <button
-                        onClick={() => handleStartLesson(topic)}
-                        className="flex items-center gap-2 bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700 transition-colors ml-4"
-                      >
-                        <Play className="h-4 w-4" />
-                        Start
-                      </button>
-                    </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      <div className="flex items-center text-neutral-600">
-                        <Clock className="h-4 w-4 mr-2" />
-                        <span>{topic.estimatedDuration} minutes</span>
-                      </div>
-                      <div className="flex items-center text-neutral-600">
-                        <Award className="h-4 w-4 mr-2" />
-                        <span>{topic.difficulty}</span>
-                      </div>
-                      <div className="flex items-center text-neutral-600">
-                        <Target className="h-4 w-4 mr-2" />
-                        <span>{topic.learningObjectives.length} objectives</span>
-                      </div>
-                    </div>
-
-                    {topic.learningObjectives.length > 0 && (
-                      <div className="mt-4">
-                        <h4 className="text-sm font-semibold text-neutral-700 mb-2">Learning Objectives:</h4>
-                        <ul className="list-disc list-inside space-y-1">
-                          {topic.learningObjectives.map((objective, i) => (
-                            <li key={i} className="text-sm text-neutral-600">{objective}</li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-
-                    {topic.prerequisites.length > 0 && (
-                      <div className="mt-4">
-                        <h4 className="text-sm font-semibold text-neutral-700 mb-2">Prerequisites:</h4>
-                        <div className="flex flex-wrap gap-2">
-                          {topic.prerequisites.map((prerequisite, i) => (
-                            <span
-                              key={i}
-                              className="px-2 py-1 bg-neutral-100 text-neutral-700 rounded-full text-sm"
-                            >
-                              {prerequisite}
-                            </span>
-                          ))}
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div className="flex items-center text-neutral-600">
+                          <Clock className="h-4 w-4 mr-2" />
+                          <span>{topic.estimatedDuration} minutes</span>
+                        </div>
+                        <div className="flex items-center text-neutral-600">
+                          <Award className="h-4 w-4 mr-2" />
+                          <span>{topic.difficulty}</span>
+                        </div>
+                        <div className="flex items-center text-neutral-600">
+                          <Target className="h-4 w-4 mr-2" />
+                          <span>{topic.learningObjectives.length} objectives</span>
                         </div>
                       </div>
-                    )}
-                  </div>
-                </motion.div>
-              ))}
-            </div>
+
+                      {topic.learningObjectives.length > 0 && (
+                        <div className="mt-4">
+                          <h4 className="text-sm font-semibold text-neutral-700 mb-2">Learning Objectives:</h4>
+                          <ul className="list-disc list-inside space-y-1">
+                            {topic.learningObjectives.map((objective, i) => (
+                              <li key={i} className="text-sm text-neutral-600">{objective}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+
+                      {topic.prerequisites.length > 0 && (
+                        <div className="mt-4">
+                          <h4 className="text-sm font-semibold text-neutral-700 mb-2">Prerequisites:</h4>
+                          <div className="flex flex-wrap gap-2">
+                            {topic.prerequisites.map((prerequisite, i) => (
+                              <span
+                                key={i}
+                                className="px-2 py-1 bg-neutral-100 text-neutral-700 rounded-full text-sm"
+                              >
+                                {prerequisite}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </motion.div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </div>
+
+      {/* Preferences Modal */}
+      {showPreferencesModal && <PreferencesModal />}
     </div>
   );
 };

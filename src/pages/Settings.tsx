@@ -1,17 +1,17 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Key, User, Settings as SettingsIcon, Save, Globe, BookOpen, RefreshCw, Edit } from 'lucide-react';
+import { Key, User, Settings as SettingsIcon, Save, Globe, BookOpen, RefreshCw } from 'lucide-react';
 import { useUserPreferences, KnowledgeLevel, Language } from '../contexts/UserPreferencesContext';
-import { useAuth } from '../contexts/AuthContext';
 import geminiService from '../services/geminiService';
 
 const Settings: React.FC = () => {
   const { preferences, updatePreferences, savePreferences } = useUserPreferences();
-  const navigate = useNavigate();
   
   // Local state
   const [apiKey, setApiKey] = useState('');
+  const [subject, setSubject] = useState('');
+  const [knowledgeLevel, setKnowledgeLevel] = useState<KnowledgeLevel>('beginner');
+  const [language, setLanguage] = useState<Language>('english');
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -19,10 +19,15 @@ const Settings: React.FC = () => {
   // Load preferences
   useEffect(() => {
     if (preferences) {
-      const storedApiKey = localStorage.getItem('gemini_api_key');
-      if (storedApiKey) {
-        setApiKey(storedApiKey);
-      }
+      setSubject(preferences.subject || '');
+      setKnowledgeLevel(preferences.knowledgeLevel || 'beginner');
+      setLanguage(preferences.language || 'english');
+    }
+    
+    // Try to load API key from localStorage (for demo)
+    const storedApiKey = localStorage.getItem('gemini_api_key');
+    if (storedApiKey) {
+      setApiKey(storedApiKey);
     }
   }, [preferences]);
   
@@ -37,6 +42,15 @@ const Settings: React.FC = () => {
       localStorage.setItem('gemini_api_key', apiKey);
       geminiService.setApiKey(apiKey);
       
+      // Save preferences
+      await updatePreferences({
+        subject,
+        knowledgeLevel,
+        language
+      });
+      
+      await savePreferences();
+      
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3000);
     } catch (err) {
@@ -45,10 +59,6 @@ const Settings: React.FC = () => {
     } finally {
       setIsSaving(false);
     }
-  };
-
-  const handleEditPreferences = () => {
-    navigate('/onboarding');
   };
   
   return (
@@ -59,18 +69,9 @@ const Settings: React.FC = () => {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5 }}
         >
-          <div className="flex items-center justify-between mb-8">
-            <div className="flex items-center">
-              <SettingsIcon className="h-8 w-8 text-primary-600 mr-3" />
-              <h1 className="text-3xl font-bold text-neutral-800">Settings</h1>
-            </div>
-            <button
-              onClick={handleEditPreferences}
-              className="btn btn-primary flex items-center gap-2"
-            >
-              <Edit className="h-4 w-4" />
-              Edit Learning Preferences
-            </button>
+          <div className="flex items-center mb-8">
+            <SettingsIcon className="h-8 w-8 text-primary-600 mr-3" />
+            <h1 className="text-3xl font-bold text-neutral-800">Settings</h1>
           </div>
           
           <div className="bg-white rounded-xl shadow-sm border border-neutral-200 overflow-hidden">
@@ -103,53 +104,78 @@ const Settings: React.FC = () => {
               </div>
             </div>
             
-            {/* Current Preferences Display */}
+            {/* Learning Preferences */}
             <div className="p-6 border-b border-neutral-200">
               <h2 className="text-xl font-semibold text-neutral-800 mb-4 flex items-center">
                 <User className="h-5 w-5 mr-2 text-primary-600" />
-                Current Learning Preferences
+                Learning Preferences
               </h2>
               
-              <div className="space-y-4">
-                <div className="flex items-center justify-between p-3 bg-neutral-50 rounded-lg">
-                  <div className="flex items-center">
-                    <BookOpen className="h-5 w-5 text-primary-600 mr-2" />
-                    <span className="text-neutral-700">Subject:</span>
-                  </div>
-                  <span className="font-medium text-neutral-900">{preferences?.subject || 'Not set'}</span>
-                </div>
-
-                <div className="flex items-center justify-between p-3 bg-neutral-50 rounded-lg">
-                  <div className="flex items-center">
-                    <User className="h-5 w-5 text-primary-600 mr-2" />
-                    <span className="text-neutral-700">Knowledge Level:</span>
-                  </div>
-                  <span className="font-medium text-neutral-900">{preferences?.knowledgeLevel || 'Not set'}</span>
-                </div>
-
-                <div className="flex items-center justify-between p-3 bg-neutral-50 rounded-lg">
-                  <div className="flex items-center">
-                    <Globe className="h-5 w-5 text-primary-600 mr-2" />
-                    <span className="text-neutral-700">Language:</span>
-                  </div>
-                  <span className="font-medium text-neutral-900">{preferences?.language || 'Not set'}</span>
-                </div>
-
-                {preferences?.learningGoals && preferences.learningGoals.length > 0 && (
-                  <div className="p-3 bg-neutral-50 rounded-lg">
-                    <div className="flex items-center mb-2">
-                      <BookOpen className="h-5 w-5 text-primary-600 mr-2" />
-                      <span className="text-neutral-700">Learning Goals:</span>
+              <div className="space-y-6">
+                <div>
+                  <label htmlFor="subject" className="block text-sm font-medium text-neutral-700 mb-1">
+                    Subject or Course
+                  </label>
+                  <div className="mt-1 relative rounded-md shadow-sm">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                      <BookOpen className="h-5 w-5 text-neutral-400" />
                     </div>
-                    <div className="flex flex-wrap gap-2 mt-2">
-                      {preferences.learningGoals.map((goal, index) => (
-                        <span key={index} className="px-3 py-1 bg-primary-100 text-primary-700 rounded-full text-sm">
-                          {goal}
-                        </span>
-                      ))}
-                    </div>
+                    <input
+                      type="text"
+                      name="subject"
+                      id="subject"
+                      className="input pl-10"
+                      placeholder="e.g., Python Programming, Data Science"
+                      value={subject}
+                      onChange={(e) => setSubject(e.target.value)}
+                    />
                   </div>
-                )}
+                </div>
+                
+                <div>
+                  <label htmlFor="knowledgeLevel" className="block text-sm font-medium text-neutral-700 mb-1">
+                    Knowledge Level
+                  </label>
+                  <div className="mt-1 relative rounded-md shadow-sm">
+                    <select
+                      id="knowledgeLevel"
+                      name="knowledgeLevel"
+                      className="input"
+                      value={knowledgeLevel}
+                      onChange={(e) => setKnowledgeLevel(e.target.value as KnowledgeLevel)}
+                    >
+                      <option value="beginner">Beginner</option>
+                      <option value="intermediate">Intermediate</option>
+                      <option value="advanced">Advanced</option>
+                    </select>
+                  </div>
+                </div>
+                
+                <div>
+                  <label htmlFor="language" className="block text-sm font-medium text-neutral-700 mb-1">
+                    Preferred Language
+                  </label>
+                  <div className="mt-1 relative rounded-md shadow-sm">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                      <Globe className="h-5 w-5 text-neutral-400" />
+                    </div>
+                    <select
+                      id="language"
+                      name="language"
+                      className="input pl-10"
+                      value={language}
+                      onChange={(e) => setLanguage(e.target.value as Language)}
+                    >
+                      <option value="english">English</option>
+                      <option value="spanish">Hindi</option>
+                      <option value="french">Malayalam</option>
+                      <option value="german">Tamil</option>
+                      <option value="chinese">Kannada</option>
+                      <option value="japanese">Marati</option>
+                      <option value="hindi">Telugu</option>
+                    </select>
+                  </div>
+                </div>
               </div>
             </div>
             
