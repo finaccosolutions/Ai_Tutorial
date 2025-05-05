@@ -31,28 +31,11 @@ const Dashboard: React.FC = () => {
   useEffect(() => {
     if (!preferences?.subject || !preferences?.knowledgeLevel || !preferences?.language) return;
 
-    const loadTopics = async () => {
-      setIsLoading(true);
-      setError(null);
-      try {
-        const topics = await geminiService.generateTopicsList(
-          preferences.subject,
-          preferences.knowledgeLevel,
-          preferences.language,
-          preferences.learningGoals || []
-        );
-        
-        setTopics(topics);
-      } catch (error: any) {
-        console.error('Error loading topics:', error);
-        setError(error.message || 'Failed to load topics. Please try again.');
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    loadTopics();
-  }, [preferences?.subject, preferences?.knowledgeLevel, preferences?.language]);
+    // Only load if no cached topics
+    if (cachedTopics.length === 0) {
+      loadCourse();
+    }
+  }, [preferences?.subject, preferences?.knowledgeLevel, preferences?.language, cachedTopics.length, loadCourse]);
 
   const handleStartLesson = (topic: Topic) => {
     localStorage.setItem('selectedTopic', JSON.stringify(topic));
