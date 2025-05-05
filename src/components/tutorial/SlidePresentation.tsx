@@ -7,35 +7,31 @@ import { speak, stopSpeaking } from '../../services/voiceService';
 interface SlidePresentationProps {
   presentation: SlidePresentation;
   isSpeakingEnabled: boolean;
+  isPaused: boolean;
+  currentSlideIndex: number;
   onTimeUpdate?: (time: number) => void;
+  onSlideChange?: (index: number) => void;
+  onPlayPause?: () => void;
 }
 
 const SlidePresentation: React.FC<SlidePresentationProps> = ({
   presentation,
   isSpeakingEnabled,
-  onTimeUpdate
+  isPaused,
+  currentSlideIndex,
+  onTimeUpdate,
+  onSlideChange,
+  onPlayPause
 }) => {
-  const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [currentTime, setCurrentTime] = useState(0);
-  const [highlightedText, setHighlightedText] = useState('');
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [imageLoaded, setImageLoaded] = useState(false);
+  const [highlightedText, setHighlightedText] = useState('');
   const containerRef = useRef<HTMLDivElement>(null);
-  const animationRef = useRef<number>();
-  const wordTimersRef = useRef<NodeJS.Timeout[]>([]);
-  const currentSlideRef = useRef(presentation.slides[currentSlideIndex]);
-  const startTimeRef = useRef(0);
-  const pauseTimeRef = useRef(0);
+  const animationFrameRef = useRef<number>();
+  const startTimeRef = useRef<number>(0);
+  const pausedTimeRef = useRef<number>(0);
+  const lastNarrationEndRef = useRef<number>(0);
 
-  // Update current slide ref when index changes
-  useEffect(() => {
-    currentSlideRef.current = presentation.slides[currentSlideIndex];
-    setImageLoaded(false);
-    setHighlightedText('');
-  }, [currentSlideIndex, presentation]);
-
-  // Handle fullscreen changes
   useEffect(() => {
     const handleFullscreenChange = () => {
       setIsFullscreen(!!document.fullscreenElement);
@@ -44,134 +40,96 @@ const SlidePresentation: React.FC<SlidePresentationProps> = ({
     document.addEventListener('fullscreenchange', handleFullscreenChange);
     return () => {
       document.removeEventListener('fullscreenchange', handleFullscreenChange);
+      stopPresentation();
     };
   }, []);
 
-  // Cleanup on unmount
   useEffect(() => {
-    return () => {
+    if (isPaused) {
       stopPresentation();
-      clearWordTimers();
-      if (animationRef.current) {
-        cancelAnimationFrame(animationRef.current);
-      }
-    };
-  }, []);
+    } else {
+      startPresentation();
+    }
+  }, [isPaused]);
 
   const startPresentation = () => {
-    setIsPlaying(true);
-    startTimeRef.current = Date.now() - pauseTimeRef.current;
-    pauseTimeRef.current = 0;
+    if (!presentation?.slides?.length) return;
 
-    // Start narration if enabled
-    if (isSpeakingEnabled) {
-      speakCurrentSlide();
+    const now = performance.now();
+    if (pausedTimeRef.current > 0) {
+      startTimeRef.current = now - pausedTimeRef.current;
+    } else {
+      startTimeRef.current = now;
     }
 
-    // Start progress animation
-    updateTime();
+    if (isSpeakingEnabled) {
+      const currentSlide = presentation.slides[currentSlideIndex];
+      speak(currentSlide.narration, () => {
+        lastNarrationEndRef.current = performance.now();
+        if (currentSlideIndex < presentation.slides.length - 1) {
+          onSlideChange?.(currentSlideIndex + 1);
+        }
+      });
+    }
+
+    animate();
   };
 
   const stopPresentation = () => {
-    setIsPlaying(false);
-    stopSpeaking();
-    pauseTimeRef.current = Date.now() - startTimeRef.current;
-    if (animationRef.current) {
-      cancelAnimationFrame(animationRef.current);
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
     }
-    clearWordTimers();
-  };
-
-  const speakCurrentSlide = () => {
-    const slide = currentSlideRef.current;
-    if (!slide?.narration) return;
-
-    // Clear any existing timers
-    clearWordTimers();
-
-    const words = slide.narration.split(' ');
-    const wordDuration = (slide.duration * 1000) / words.length;
-
-    // Highlight words one by one
-    words.forEach((_, index) => {
-      const timer = setTimeout(() => {
-        if (!isPlaying) return;
-        setHighlightedText(words.slice(0, index + 1).join(' '));
-      }, index * wordDuration);
-      wordTimersRef.current.push(timer);
-    });
-
-    // Speak the narration
+    pausedTimeRef.current = performance.now() - startTimeRef.current;
     stopSpeaking();
-    speak(slide.narration, () => {
-      if (currentSlideIndex < presentation.slides.length - 1) {
-        // Move to next slide when narration ends
-        setTimeout(() => {
-          setCurrentSlideIndex(prev => prev + 1);
-        }, 500);
-      } else {
-        // End of presentation
-        stopPresentation();
-      }
-    }, 0.9);
   };
 
-  const updateTime = () => {
-    const elapsed = (Date.now() - startTimeRef.current) / 1000;
-    setCurrentTime(elapsed);
+  const animate = () => {
+    const now = performance.now();
+    const elapsed = (now - startTimeRef.current) / 1000;
+    
     onTimeUpdate?.(elapsed);
 
-    // Check if we need to move to next slide
-    const slideEndTime = presentation.slides
-      .slice(0, currentSlideIndex + 1)
-      .reduce((sum, slide) => sum + slide.duration, 0);
-
-    if (elapsed >= slideEndTime && currentSlideIndex < presentation.slides.length - 1) {
-      setCurrentSlideIndex(prev => prev + 1);
+    // Calculate total duration up to current slide
+    let totalDuration = 0;
+    for (let i = 0; i <= currentSlideIndex; i++) {
+      totalDuration += presentation.slides[i].duration;
     }
 
-    if (elapsed < presentation.totalDuration) {
-      animationRef.current = requestAnimationFrame(updateTime);
-    } else {
-      stopPresentation();
+    // Update highlighted text based on elapsed time
+    const currentSlide = presentation.slides[currentSlideIndex];
+    const slideElapsed = elapsed - (totalDuration - currentSlide.duration);
+    const words = currentSlide.narration.split(' ');
+    const wordsPerSecond = words.length / currentSlide.duration;
+    const wordIndex = Math.floor(slideElapsed * wordsPerSecond);
+    setHighlightedText(words.slice(0, wordIndex).join(' '));
+
+    // Check if it's time to move to next slide
+    if (elapsed >= totalDuration && currentSlideIndex < presentation.slides.length - 1) {
+      onSlideChange?.(currentSlideIndex + 1);
     }
+
+    animationFrameRef.current = requestAnimationFrame(animate);
   };
 
-  const clearWordTimers = () => {
-    wordTimersRef.current.forEach(timer => clearTimeout(timer));
-    wordTimersRef.current = [];
-  };
-
-  const togglePlay = () => {
-    if (isPlaying) {
-      stopPresentation();
-    } else {
-      // If at end, restart from beginning
-      if (currentSlideIndex === presentation.slides.length - 1) {
-        setCurrentSlideIndex(0);
-        setCurrentTime(0);
-      }
-      startPresentation();
-    }
-  };
-
-  const goToNextSlide = () => {
-    if (currentSlideIndex < presentation.slides.length - 1) {
-      stopPresentation();
-      setCurrentSlideIndex(prev => prev + 1);
-      setCurrentTime(presentation.slides
-        .slice(0, currentSlideIndex + 1)
-        .reduce((sum, slide) => sum + slide.duration, 0));
-    }
-  };
-
-  const goToPrevSlide = () => {
+  const handlePrevSlide = () => {
     if (currentSlideIndex > 0) {
       stopPresentation();
-      setCurrentSlideIndex(prev => prev - 1);
-      setCurrentTime(presentation.slides
-        .slice(0, currentSlideIndex - 1)
-        .reduce((sum, slide) => sum + slide.duration, 0));
+      onSlideChange?.(currentSlideIndex - 1);
+      pausedTimeRef.current = 0;
+      if (!isPaused) {
+        startPresentation();
+      }
+    }
+  };
+
+  const handleNextSlide = () => {
+    if (currentSlideIndex < presentation.slides.length - 1) {
+      stopPresentation();
+      onSlideChange?.(currentSlideIndex + 1);
+      pausedTimeRef.current = 0;
+      if (!isPaused) {
+        startPresentation();
+      }
     }
   };
 
@@ -198,10 +156,12 @@ const SlidePresentation: React.FC<SlidePresentationProps> = ({
   }
 
   const currentSlide = presentation.slides[currentSlideIndex];
-  const progressPercentage = (currentTime / presentation.totalDuration) * 100;
-  const slideProgressPercentage = ((currentTime - presentation.slides
-    .slice(0, currentSlideIndex)
-    .reduce((sum, slide) => sum + slide.duration, 0)) / currentSlide.duration) * 100;
+  const elapsedTime = pausedTimeRef.current > 0 
+    ? pausedTimeRef.current / 1000 
+    : (performance.now() - startTimeRef.current) / 1000;
+  
+  const totalDuration = presentation.slides.reduce((sum, slide) => sum + slide.duration, 0);
+  const progressPercentage = (elapsedTime / totalDuration) * 100;
 
   return (
     <div 
@@ -220,10 +180,10 @@ const SlidePresentation: React.FC<SlidePresentationProps> = ({
             transition={{ duration: 0.4, ease: "easeInOut" }}
             className="w-full h-full p-8 flex flex-col items-center justify-center"
           >
-            {/* Slide Navigation Arrows */}
+            {/* Navigation Arrows */}
             <div className="absolute inset-0 flex items-center justify-between px-4 z-10">
               <button
-                onClick={goToPrevSlide}
+                onClick={handlePrevSlide}
                 disabled={currentSlideIndex === 0}
                 className={`p-3 rounded-full bg-white/80 shadow-lg backdrop-blur-sm transition-all ${
                   currentSlideIndex === 0 ? 'opacity-0' : 'opacity-100 hover:bg-white'
@@ -232,7 +192,7 @@ const SlidePresentation: React.FC<SlidePresentationProps> = ({
                 <ChevronLeft className="w-6 h-6 text-blue-600" />
               </button>
               <button
-                onClick={goToNextSlide}
+                onClick={handleNextSlide}
                 disabled={currentSlideIndex === presentation.slides.length - 1}
                 className={`p-3 rounded-full bg-white/80 shadow-lg backdrop-blur-sm transition-all ${
                   currentSlideIndex === presentation.slides.length - 1 ? 'opacity-0' : 'opacity-100 hover:bg-white'
@@ -242,34 +202,34 @@ const SlidePresentation: React.FC<SlidePresentationProps> = ({
               </button>
             </div>
 
-            {/* Main Slide Content */}
-            <div className="max-w-6xl w-full mx-auto relative z-0">
+            {/* Main Content */}
+            <div className="max-w-4xl w-full mx-auto">
               <motion.div
                 className="bg-white/90 backdrop-blur-sm rounded-3xl shadow-xl p-10 border border-gray-100"
                 initial={{ scale: 0.95 }}
                 animate={{ scale: 1 }}
                 transition={{ duration: 0.3 }}
               >
-                <h2 className="text-4xl font-bold text-gray-800 mb-8 leading-tight">
+                <h2 className="text-3xl font-bold text-gray-800 mb-6">
                   {currentSlide.content.split('\n')[0]}
                 </h2>
                 
-                <div className="prose prose-xl max-w-none text-gray-700">
+                <div className="prose prose-lg max-w-none">
                   {currentSlide.narration.split('\n').map((paragraph, i) => (
                     <motion.p 
-                      key={i} 
-                      className="mb-6 leading-relaxed"
+                      key={i}
+                      className="mb-4 leading-relaxed"
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
                       transition={{ delay: 0.2 + i * 0.1 }}
                     >
-                      {isPlaying ? (
+                      {!isPaused ? (
                         <>
                           <span className="text-blue-600 font-medium">
-                            {highlightedText.split('\n')[i] || ''}
+                            {highlightedText}
                           </span>
                           <span className="text-gray-400">
-                            {paragraph.slice((highlightedText.split('\n')[i] || '').length)}
+                            {paragraph.slice(highlightedText.length)}
                           </span>
                         </>
                       ) : (
@@ -283,21 +243,18 @@ const SlidePresentation: React.FC<SlidePresentationProps> = ({
               {/* Visual Aid */}
               {currentSlide.visualAid && (
                 <motion.div
-                  className="mt-10 w-full max-w-4xl mx-auto"
+                  className="mt-8 w-full max-w-3xl mx-auto"
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ 
                     opacity: imageLoaded ? 1 : 0,
                     y: imageLoaded ? 0 : 20
                   }}
-                  transition={{ delay: 0.4, duration: 0.5 }}
+                  transition={{ delay: 0.4 }}
                 >
                   <img
-                    src={currentSlide.visualAid.includes('http') 
-                      ? currentSlide.visualAid 
-                      : `https://source.unsplash.com/1600x900/?${encodeURIComponent(currentSlide.visualAid)}`}
-                    alt={currentSlide.visualAid}
+                    src={currentSlide.visualAid}
+                    alt="Visual aid"
                     className="rounded-xl w-full h-auto object-cover shadow-lg"
-                    loading="eager"
                     onLoad={() => setImageLoaded(true)}
                   />
                 </motion.div>
@@ -310,29 +267,22 @@ const SlidePresentation: React.FC<SlidePresentationProps> = ({
       {/* Controls */}
       <div className="p-6 bg-white border-t border-gray-200">
         <div className="flex items-center gap-4 mb-4">
-          <span className="text-sm font-medium text-gray-600 w-12 text-right">
-            {formatTime(currentTime)}
+          <span className="text-sm font-medium text-gray-600 w-16">
+            {formatTime(elapsedTime)}
           </span>
           
           <div className="flex-grow flex flex-col gap-1">
             {/* Overall progress */}
-            <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
+            <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
               <div
                 className="h-full bg-blue-600 rounded-full transition-all duration-300"
                 style={{ width: `${progressPercentage}%` }}
               />
             </div>
-            {/* Current slide progress */}
-            <div className="h-1 bg-gray-100 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-blue-400 rounded-full transition-all duration-300"
-                style={{ width: `${slideProgressPercentage}%` }}
-              />
-            </div>
           </div>
           
-          <span className="text-sm font-medium text-gray-600 w-12">
-            {formatTime(presentation.totalDuration)}
+          <span className="text-sm font-medium text-gray-600 w-16">
+            {formatTime(totalDuration)}
           </span>
         </div>
 
@@ -343,22 +293,22 @@ const SlidePresentation: React.FC<SlidePresentationProps> = ({
 
           <div className="flex items-center space-x-4">
             <button
-              onClick={togglePlay}
+              onClick={onPlayPause}
               className={`p-4 rounded-full shadow-lg transition-all transform hover:scale-105 ${
-                isPlaying 
-                  ? 'bg-red-500 hover:bg-red-600' 
-                  : 'bg-blue-600 hover:bg-blue-700'
+                isPaused 
+                  ? 'bg-blue-600 hover:bg-blue-700' 
+                  : 'bg-red-500 hover:bg-red-600'
               } text-white`}
             >
-              {isPlaying ? (
-                <Pause className="w-6 h-6" />
-              ) : (
+              {isPaused ? (
                 <Play className="w-6 h-6" />
+              ) : (
+                <Pause className="w-6 h-6" />
               )}
             </button>
 
             <button
-              onClick={() => setIsSpeakingEnabled(!isSpeakingEnabled)}
+              onClick={() => {}}
               className={`p-3 rounded-full shadow-sm ${
                 isSpeakingEnabled 
                   ? 'bg-blue-100 text-blue-600' 

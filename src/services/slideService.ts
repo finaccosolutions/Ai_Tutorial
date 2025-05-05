@@ -111,12 +111,17 @@ class SlideService {
     }
   }
 
-  async generateSlidePresentation(topic: string, level: string): Promise<SlidePresentation> {
+  async generateSlidePresentation(
+    topic: string, 
+    level: string,
+    language: string = 'english',
+    learningGoals: string[] = []
+  ): Promise<SlidePresentation> {
     if (!this.model) {
       throw new Error('Gemini API not initialized. Please set API key first.');
     }
 
-    const prompt = `Generate an engaging educational presentation about "${topic}" for ${level} level students. Return ONLY a JSON object with the following structure:
+    const prompt = `Generate an engaging educational presentation about "${topic}" for ${level} level students in ${language}. Consider these learning goals: ${learningGoals.join(', ')}. Return ONLY a JSON object with the following structure:
 
 {
   "title": "Main presentation title",
@@ -136,7 +141,7 @@ Create 4-5 comprehensive slides with rich, educational content. Each slide shoul
 - Have detailed content with clear headers and well-structured points
 - Include thorough explanations and examples
 - Provide practical applications and real-world context
-- Have a natural, engaging narration script
+- Have a natural, engaging narration script in ${language}
 - Include relevant visual aid descriptions
 - Have a duration between 60-120 seconds for proper coverage`;
 

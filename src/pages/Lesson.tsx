@@ -26,6 +26,8 @@ const Lesson: React.FC = () => {
   const [isSpeakingEnabled, setIsSpeakingEnabled] = useState(true);
   const [currentTime, setCurrentTime] = useState(0);
   const [showQuiz, setShowQuiz] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
+  const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
 
   useEffect(() => {
     const loadPresentation = async () => {
@@ -40,7 +42,9 @@ const Lesson: React.FC = () => {
         slideService.initialize(geminiApiKey);
         const generatedPresentation = await slideService.generateSlidePresentation(
           preferences.subject,
-          preferences.knowledgeLevel
+          preferences.knowledgeLevel,
+          preferences.language,
+          preferences.learningGoals
         );
         setPresentation(generatedPresentation);
       } catch (error: any) {
@@ -65,6 +69,14 @@ const Lesson: React.FC = () => {
 
   const handleQuizComplete = (correct: boolean) => {
     setShowQuiz(false);
+  };
+
+  const handleSlideChange = (index: number) => {
+    setCurrentSlideIndex(index);
+  };
+
+  const handlePlayPause = () => {
+    setIsPaused(!isPaused);
   };
 
   const handleAskQuestion = async () => {
@@ -136,16 +148,16 @@ const Lesson: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-neutral-50">
+    <div className="min-h-screen bg-gradient-to-br from-neutral-50 to-primary-50">
       {/* Header */}
-      <div className="bg-white border-b border-neutral-200 py-4">
+      <div className="bg-white border-b border-neutral-200 py-4 shadow-sm">
         <div className="container mx-auto px-4 flex justify-between items-center">
           <div className="flex items-center">
             <button 
               onClick={() => navigate('/dashboard')}
-              className="flex items-center text-neutral-700 hover:text-primary-600"
+              className="flex items-center text-neutral-700 hover:text-primary-600 transition-colors"
             >
-              <ArrowLeft className="h-5 w-5 mr-1" />
+              <ArrowLeft className="h-5 w-5 mr-2" />
               <span className="font-medium">Back to Dashboard</span>
             </button>
           </div>
@@ -153,7 +165,7 @@ const Lesson: React.FC = () => {
           <div className="flex items-center space-x-4">
             <button
               onClick={() => setIsSpeakingEnabled(!isSpeakingEnabled)}
-              className={`p-2 rounded-full ${
+              className={`p-2 rounded-full transition-colors ${
                 isSpeakingEnabled ? 'bg-primary-100 text-primary-700' : 'bg-neutral-100 text-neutral-700'
               } hover:bg-primary-200`}
               title={isSpeakingEnabled ? 'Disable voice' : 'Enable voice'}
@@ -166,7 +178,7 @@ const Lesson: React.FC = () => {
             </button>
             <button
               onClick={() => setShowChat(!showChat)}
-              className={`p-2 rounded-full ${
+              className={`p-2 rounded-full transition-colors ${
                 showChat ? 'bg-primary-100 text-primary-700' : 'bg-neutral-100 text-neutral-700'
               } hover:bg-primary-200`}
             >
@@ -178,16 +190,26 @@ const Lesson: React.FC = () => {
 
       {/* Main Content */}
       <div className="container mx-auto px-4 py-8">
-        <div className="max-w-5xl mx-auto">
-          <h1 className="text-3xl font-bold text-neutral-800 mb-8">{presentation.title}</h1>
-          
-          <div className="space-y-8">
-            <SlidePresentation
-              presentation={presentation}
-              isSpeakingEnabled={isSpeakingEnabled}
-              onTimeUpdate={handleTimeUpdate}
-            />
-          </div>
+        <div className="max-w-6xl mx-auto">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5 }}
+          >
+            <h1 className="text-3xl font-bold text-neutral-800 mb-8">{presentation.title}</h1>
+            
+            <div className="space-y-8">
+              <SlidePresentation
+                presentation={presentation}
+                isSpeakingEnabled={isSpeakingEnabled}
+                isPaused={isPaused}
+                onPlayPause={handlePlayPause}
+                onTimeUpdate={handleTimeUpdate}
+                onSlideChange={handleSlideChange}
+                currentSlideIndex={currentSlideIndex}
+              />
+            </div>
+          </motion.div>
         </div>
       </div>
 
@@ -202,11 +224,11 @@ const Lesson: React.FC = () => {
             className="fixed right-0 top-0 bottom-0 w-96 bg-white shadow-lg border-l border-neutral-200 z-40"
           >
             <div className="flex flex-col h-full">
-              <div className="p-4 border-b border-neutral-200 flex justify-between items-center">
-                <h2 className="text-lg font-semibold">Questions & Answers</h2>
+              <div className="p-4 border-b border-neutral-200 flex justify-between items-center bg-gradient-to-r from-primary-50 to-primary-100">
+                <h2 className="text-lg font-semibold text-primary-900">Questions & Answers</h2>
                 <button
                   onClick={() => setShowChat(false)}
-                  className="text-neutral-500 hover:text-neutral-700"
+                  className="text-neutral-500 hover:text-neutral-700 transition-colors"
                 >
                   <X className="h-5 w-5" />
                 </button>
@@ -225,7 +247,7 @@ const Lesson: React.FC = () => {
                 )}
               </div>
 
-              <div className="p-4 border-t border-neutral-200">
+              <div className="p-4 border-t border-neutral-200 bg-white">
                 <div className="flex space-x-2">
                   <input
                     type="text"
@@ -254,6 +276,30 @@ const Lesson: React.FC = () => {
                 </div>
               </div>
             </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Quiz Modal */}
+      <AnimatePresence>
+        {showQuiz && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+          >
+            <Quiz
+              question="What was the main concept covered in this section?"
+              options={[
+                "Option 1",
+                "Option 2",
+                "Option 3",
+                "Option 4"
+              ]}
+              correctAnswer={0}
+              onComplete={handleQuizComplete}
+            />
           </motion.div>
         )}
       </AnimatePresence>
