@@ -169,12 +169,11 @@ const SlidePresentation: React.FC<SlidePresentationProps> = ({
   }
 
   const currentSlide = presentation.slides[currentSlideIndex];
-  const elapsedTime = pausedTimeRef.current > 0 
+  const currentTime = pausedTimeRef.current > 0 
     ? pausedTimeRef.current / 1000 
     : (performance.now() - startTimeRef.current) / 1000;
   
   const totalDuration = presentation.slides.reduce((sum, slide) => sum + slide.duration, 0);
-  const progressPercentage = (elapsedTime / totalDuration) * 100;
 
   return (
     <div 
@@ -182,7 +181,7 @@ const SlidePresentation: React.FC<SlidePresentationProps> = ({
       className="bg-white rounded-xl shadow-2xl overflow-hidden flex flex-col"
       style={{ height: isFullscreen ? '100vh' : 'calc(100vh - 8rem)' }}
     >
-      {/* Slide Content */}
+      {/* Main Content Area */}
       <div className="flex-grow relative bg-gradient-to-br from-blue-50 to-indigo-50 overflow-hidden">
         <AnimatePresence mode="wait">
           <motion.div
@@ -190,11 +189,11 @@ const SlidePresentation: React.FC<SlidePresentationProps> = ({
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -20 }}
-            transition={{ duration: 0.4, ease: "easeInOut" }}
+            transition={{ duration: 0.4 }}
             className="w-full h-full p-8 flex flex-col items-center justify-center"
           >
             {/* Navigation Arrows */}
-            <div className="absolute inset-0 flex items-center justify-between px-4 z-10">
+            <div className="absolute inset-0 flex items-center justify-between px-4">
               <button
                 onClick={handlePrevSlide}
                 disabled={currentSlideIndex === 0}
@@ -215,95 +214,83 @@ const SlidePresentation: React.FC<SlidePresentationProps> = ({
               </button>
             </div>
 
-            {/* Main Content */}
+            {/* Content */}
             <div className="max-w-4xl w-full mx-auto">
               <motion.div
-                className="bg-white/90 backdrop-blur-sm rounded-3xl shadow-xl p-10 border border-gray-100"
+                className="bg-white/90 backdrop-blur-sm rounded-3xl shadow-xl p-10"
                 initial={{ scale: 0.95 }}
                 animate={{ scale: 1 }}
                 transition={{ duration: 0.3 }}
               >
                 <h2 className="text-3xl font-bold text-gray-800 mb-6">
-                  {currentSlide.content.split('\n')[0]}
+                  {currentSlide.title}
                 </h2>
                 
                 <div className="prose prose-lg max-w-none">
-                  {currentSlide.narration.split('\n').map((paragraph, i) => (
-                    <motion.p 
+                  {currentSlide.content.split('\n').map((paragraph, i) => (
+                    <motion.div 
                       key={i}
-                      className="mb-4 leading-relaxed"
+                      className="mb-4"
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
                       transition={{ delay: 0.2 + i * 0.1 }}
                     >
                       {!isPaused ? (
-                        <>
+                        <p className="leading-relaxed">
                           <span className="text-blue-600 font-medium">
                             {highlightedText}
                           </span>
-                          <span className="text-gray-400">
+                          <span className="text-gray-600">
                             {paragraph.slice(highlightedText.length)}
                           </span>
-                        </>
+                        </p>
                       ) : (
-                        paragraph
+                        <p className="leading-relaxed text-gray-800">{paragraph}</p>
                       )}
-                    </motion.p>
+                    </motion.div>
                   ))}
                 </div>
               </motion.div>
-
-              {/* Visual Aid */}
-              {currentSlide.visualAid && (
-                <motion.div
-                  className="mt-8 w-full max-w-3xl mx-auto"
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ 
-                    opacity: imageLoaded ? 1 : 0,
-                    y: imageLoaded ? 0 : 20
-                  }}
-                  transition={{ delay: 0.4 }}
-                >
-                  <img
-                    src={currentSlide.visualAid}
-                    alt="Visual aid"
-                    className="rounded-xl w-full h-auto object-cover shadow-lg"
-                    onLoad={() => setImageLoaded(true)}
-                  />
-                </motion.div>
-              )}
             </div>
           </motion.div>
         </AnimatePresence>
       </div>
 
       {/* Controls */}
-      <div className="p-6 bg-white border-t border-gray-200">
-        <div className="flex items-center gap-4 mb-4">
-          <span className="text-sm font-medium text-gray-600 w-16">
-            {formatTime(elapsedTime)}
-          </span>
-          
-          <div className="flex-grow flex flex-col gap-1">
-            {/* Overall progress */}
+      <div className="bg-white border-t border-gray-200 p-6">
+        {/* Progress Bars */}
+        <div className="space-y-2 mb-4">
+          {/* Total Progress */}
+          <div>
+            <div className="flex justify-between text-sm text-gray-600 mb-1">
+              <span>Total Progress</span>
+              <span>{formatTime(currentTime)} / {formatTime(totalDuration)}</span>
+            </div>
             <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
               <div
                 className="h-full bg-blue-600 rounded-full transition-all duration-300"
-                style={{ width: `${progressPercentage}%` }}
+                style={{ width: `${(currentTime / totalDuration) * 100}%` }}
               />
             </div>
           </div>
-          
-          <span className="text-sm font-medium text-gray-600 w-16">
-            {formatTime(totalDuration)}
-          </span>
+
+          {/* Slide Progress */}
+          <div>
+            <div className="flex justify-between text-sm text-gray-600 mb-1">
+              <span>Slide Progress</span>
+              <span>{currentSlideIndex + 1} / {presentation.slides.length}</span>
+            </div>
+            <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-green-500 rounded-full transition-all duration-300"
+                style={{ width: `${((currentSlideIndex + 1) / presentation.slides.length) * 100}%` }}
+              />
+            </div>
+          </div>
         </div>
 
+        {/* Playback Controls */}
         <div className="flex items-center justify-between">
-          <div className="text-sm font-medium text-gray-600">
-            Slide {currentSlideIndex + 1} of {presentation.slides.length}
-          </div>
-
           <div className="flex items-center space-x-4">
             <button
               onClick={onPlayPause}
@@ -322,7 +309,7 @@ const SlidePresentation: React.FC<SlidePresentationProps> = ({
 
             <button
               onClick={() => {}}
-              className={`p-3 rounded-full shadow-sm ${
+              className={`p-3 rounded-full ${
                 isSpeakingEnabled 
                   ? 'bg-blue-100 text-blue-600' 
                   : 'bg-gray-100 text-gray-600'

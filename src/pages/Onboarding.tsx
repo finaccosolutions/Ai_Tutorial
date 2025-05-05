@@ -27,12 +27,15 @@ const Onboarding: React.FC = () => {
   const [learningGoals, setLearningGoals] = useState<string[]>(preferences?.learningGoals || []);
   const [customGoal, setCustomGoal] = useState('');
 
-  // Check if preferences exist and redirect if onboarding is completed
   useEffect(() => {
-    if (preferences?.onboardingCompleted) {
-      navigate('/dashboard');
+    if (preferences) {
+      // Load existing preferences
+      setSubject(preferences.subject || '');
+      setKnowledgeLevel(preferences.knowledgeLevel || 'beginner');
+      setLanguage(preferences.language || 'English');
+      setLearningGoals(preferences.learningGoals || []);
     }
-  }, [preferences, navigate]);
+  }, [preferences]);
   
   // Common goals options
   const commonGoals = [
@@ -99,7 +102,6 @@ const Onboarding: React.FC = () => {
     setIsSubmitting(true);
     
     try {
-      // Update preferences locally first
       const newPreferences = {
         subject,
         knowledgeLevel,
@@ -108,11 +110,10 @@ const Onboarding: React.FC = () => {
         onboardingCompleted: true
       };
       
-      // Update context and save to database
       await updatePreferences(newPreferences);
       await savePreferences();
       
-      // Navigate to dashboard
+      // Navigate back to dashboard to see updated content
       navigate('/dashboard');
     } catch (error) {
       console.error('Error saving preferences:', error);
