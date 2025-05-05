@@ -4,27 +4,55 @@ let currentUtterance: SpeechSynthesisUtterance | null = null;
 let retryCount = 0;
 const MAX_RETRIES = 3;
 const RETRY_DELAY = 500;
+let lastSpeakPosition = 0;
+let currentText = '';
+let wordTimings: { word: string; start: number; end: number }[] = [];
+let speechStartTime: number;
+let isIntentionalStop = false;
 
-// Text-to-speech function
 export const speak = (
   text: string, 
   onEnd?: () => void, 
-  rate = 1
+  rate = 1,
+  startPosition = 0
 ): SpeechSynthesisUtterance | null => {
   if (!window.speechSynthesis) {
     console.error('Speech synthesis not supported in this browser');
     return null;
   }
 
-  // Reset retry count for new speech
+  // Reset retry count and intentional stop flag for new speech
   retryCount = 0;
+  isIntentionalStop = false;
+  currentText = text;
+
+  // Calculate word timings
+  const words = text.split(' ');
+  const totalDuration = (text.length / rate) * 50; // Approximate duration based on text length
+  const timePerWord = totalDuration / words.length;
+  
+  wordTimings = words.map((word, index) => ({
+    word,
+    start: index * timePerWord,
+    end: (index + 1) * timePerWord
+  }));
 
   // Cancel any ongoing speech
-  stopSpeaking();
+  if (window.speechSynthesis.speaking) {
+    window.speechSynthesis.cancel();
+  }
 
   // Create utterance
   const utterance = new SpeechSynthesisUtterance(text);
   currentUtterance = utterance;
+  lastSpeakPosition = startPosition;
+  
+  // If resuming from a position, skip to that part of the text
+  if (startPosition > 0) {
+    const wordsToSkip = wordTimings.filter(timing => timing.start < startPosition);
+    const remainingText = words.slice(wordsToSkip.length).join(' ');
+    utterance.text = remainingText;
+  }
   
   // Wait for voices to be loaded
   const loadVoices = () => {
@@ -43,7 +71,7 @@ export const speak = (
     
     if (preferredVoices.length > 0) {
       utterance.voice = preferredVoices[0];
-    } else {
+    } else if (voices.length > 0) {
       utterance.voice = voices[0];
     }
     
@@ -64,7 +92,15 @@ export const speak = (
     utterance.onerror = (event) => {
       console.error('Speech synthesis error:', event);
       
-      if (currentUtterance !== utterance) {
+      if (currentUtterance !== utterance || isIntentionalStop) {
+        return;
+      }
+
+      // Don't retry if the error was due to an intentional interruption
+      if (event.error === 'interrupted') {
+        currentUtterance = null;
+        retryCount = 0;
+        if (onEnd) onEnd();
         return;
       }
 
@@ -75,8 +111,6 @@ export const speak = (
         setTimeout(() => {
           try {
             if (!window.speechSynthesis.speaking && currentUtterance === utterance) {
-              window.speechSynthesis.cancel();
-              window.speechSynthesis.resume();
               window.speechSynthesis.speak(utterance);
             }
           } catch (error) {
@@ -93,8 +127,7 @@ export const speak = (
     
     try {
       if (!window.speechSynthesis.speaking) {
-        window.speechSynthesis.cancel();
-        window.speechSynthesis.resume();
+        speechStartTime = Date.now();
         window.speechSynthesis.speak(utterance);
       }
     } catch (error) {
@@ -114,18 +147,37 @@ export const speak = (
   return utterance;
 };
 
-// Stop speaking
 export const stopSpeaking = (): void => {
-  if (window.speechSynthesis) {
+  if (window.speechSynthesis && window.speechSynthesis.speaking) {
     try {
+      isIntentionalStop = true;
+      if (currentUtterance) {
+        // Store the current position before stopping
+        const elapsedTime = (Date.now() - speechStartTime) / 1000;
+        lastSpeakPosition = elapsedTime;
+      }
       window.speechSynthesis.cancel();
-      window.speechSynthesis.resume();
       currentUtterance = null;
       retryCount = 0;
     } catch (error) {
       console.error('Error stopping speech:', error);
     }
   }
+};
+
+export const resumeSpeaking = (
+  onEnd?: () => void,
+  rate = 1
+): SpeechSynthesisUtterance | null => {
+  isIntentionalStop = false;
+  return speak(currentText, onEnd, rate, lastSpeakPosition);
+};
+
+export const getCurrentWordTiming = (currentTime: number): number => {
+  const timing = wordTimings.findIndex(
+    timing => currentTime >= timing.start && currentTime < timing.end
+  );
+  return timing >= 0 ? timing : wordTimings.length;
 };
 
 // Speech recognition states

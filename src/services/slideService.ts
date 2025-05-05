@@ -183,6 +183,8 @@ Create 4-5 comprehensive slides with rich, educational content. Each slide shoul
   ): void {
     if (!presentation || !presentation.slides.length) return;
 
+    this.stopPresentation();
+
     this.currentPresentation = presentation;
     this.currentSlideIndex = 0;
     this.isPlaying = true;

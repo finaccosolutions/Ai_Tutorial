@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Play, Pause, Volume2, VolumeX, Maximize2, ChevronLeft, ChevronRight } from 'lucide-react';
 import type { SlidePresentation } from '../../services/slideService';
-import { speak, stopSpeaking } from '../../services/voiceService';
+import { speak, stopSpeaking, resumeSpeaking } from '../../services/voiceService';
 
 interface SlidePresentationProps {
   presentation: SlidePresentation;
@@ -45,10 +45,10 @@ const SlidePresentation: React.FC<SlidePresentationProps> = ({
   }, []);
 
   useEffect(() => {
-    if (isPaused) {
-      stopPresentation();
+    if (!isPaused) {
+      resumePresentation();
     } else {
-      startPresentation();
+      stopPresentation();
     }
   }, [isPaused]);
 
@@ -81,6 +81,19 @@ const SlidePresentation: React.FC<SlidePresentationProps> = ({
     }
     pausedTimeRef.current = performance.now() - startTimeRef.current;
     stopSpeaking();
+  };
+
+  const resumePresentation = () => {
+    if (isSpeakingEnabled) {
+      const currentSlide = presentation.slides[currentSlideIndex];
+      resumeSpeaking(() => {
+        lastNarrationEndRef.current = performance.now();
+        if (currentSlideIndex < presentation.slides.length - 1) {
+          onSlideChange?.(currentSlideIndex + 1);
+        }
+      });
+    }
+    animate();
   };
 
   const animate = () => {
