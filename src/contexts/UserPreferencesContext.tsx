@@ -42,11 +42,12 @@ export const UserPreferencesProvider: React.FC<{ children: React.ReactNode }> = 
     if (user) {
       const loadPreferences = async () => {
         try {
+          // Use maybeSingle() instead of single() to handle cases where no preferences exist
           const { data, error } = await supabase
             .from('user_preferences')
             .select('*')
             .eq('user_id', user.id)
-            .single();
+            .maybeSingle();
 
           if (error) {
             console.error('Error loading preferences:', error);
@@ -63,6 +64,22 @@ export const UserPreferencesProvider: React.FC<{ children: React.ReactNode }> = 
               onboardingCompleted: data.onboarding_completed || false
             });
           } else {
+            // If no preferences exist yet, create them
+            const { error: insertError } = await supabase
+              .from('user_preferences')
+              .insert({
+                user_id: user.id,
+                subject: defaultPreferences.subject,
+                knowledge_level: defaultPreferences.knowledgeLevel,
+                language: defaultPreferences.language,
+                learning_goals: defaultPreferences.learningGoals,
+                onboarding_completed: defaultPreferences.onboardingCompleted
+              });
+
+            if (insertError) {
+              console.error('Error creating default preferences:', insertError);
+            }
+
             setPreferences(defaultPreferences);
           }
         } catch (error) {
