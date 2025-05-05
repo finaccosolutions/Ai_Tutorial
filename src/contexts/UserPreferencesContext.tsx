@@ -4,7 +4,7 @@ import { supabase } from '../lib/supabase';
 
 // Types
 export type KnowledgeLevel = 'beginner' | 'intermediate' | 'advanced';
-export type Language = 'english' | 'spanish' | 'french' | 'german' | 'chinese' | 'japanese' | 'hindi';
+export type Language = 'English' | 'Hindi' | 'Malayalam' | 'Tamil' | 'Kannada' | 'Telugue' | 'Marati';
 
 export interface UserPreferences {
   subject: string;
@@ -64,7 +64,7 @@ export const UserPreferencesProvider: React.FC<{ children: React.ReactNode }> = 
               onboardingCompleted: data.onboarding_completed || false
             });
           } else {
-            // If no preferences exist yet, create them
+                        // If no preferences exist yet, create them
             const { error: insertError } = await supabase
               .from('user_preferences')
               .insert({
@@ -79,8 +79,6 @@ export const UserPreferencesProvider: React.FC<{ children: React.ReactNode }> = 
             if (insertError) {
               console.error('Error creating default preferences:', insertError);
             }
-
-            setPreferences(defaultPreferences);
           }
         } catch (error) {
           console.error('Error loading preferences:', error);
@@ -109,14 +107,20 @@ export const UserPreferencesProvider: React.FC<{ children: React.ReactNode }> = 
     try {
       const { error } = await supabase
         .from('user_preferences')
-        .upsert({
-          user_id: user.id,
-          subject: preferences.subject,
-          knowledge_level: preferences.knowledgeLevel,
-          language: preferences.language,
-          learning_goals: preferences.learningGoals,
-          onboarding_completed: preferences.onboardingCompleted
-        });
+        .upsert(
+          {
+            user_id: user.id,
+            subject: preferences.subject,
+            knowledge_level: preferences.knowledgeLevel,
+            language: preferences.language,
+            learning_goals: preferences.learningGoals,
+            onboarding_completed: preferences.onboardingCompleted
+          },
+          {
+            onConflict: 'user_id',
+            ignoreDuplicates: false
+          }
+        );
 
       if (error) throw error;
     } catch (error) {
