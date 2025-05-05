@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Play, BookOpen, User2, Settings, Clock, Target, Award, RefreshCw, Edit } from 'lucide-react';
 import { useUserPreferences } from '../contexts/UserPreferencesContext';
 import { useAuth } from '../contexts/AuthContext';
 import geminiService, { Topic } from '../services/geminiService';
+import Onboarding from './Onboarding';
 
 const Dashboard: React.FC = () => {
   const { preferences, updatePreferences, savePreferences } = useUserPreferences();
@@ -15,7 +16,6 @@ const Dashboard: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showPreferencesModal, setShowPreferencesModal] = useState(false);
-  const [editedPreferences, setEditedPreferences] = useState(preferences);
   const [isSaving, setIsSaving] = useState(false);
   
   // Check if API key is set
@@ -25,13 +25,6 @@ const Dashboard: React.FC = () => {
       return;
     }
   }, [geminiApiKey, navigate]);
-  
-  // Check if onboarding is complete
-  useEffect(() => {
-    if (preferences && !preferences.onboardingCompleted) {
-      navigate('/onboarding');
-    }
-  }, [preferences, navigate]);
   
   // Load topics based on user preferences
   useEffect(() => {
@@ -65,14 +58,17 @@ const Dashboard: React.FC = () => {
     navigate(`/lesson/${topic.id}`);
   };
 
-  const handleSavePreferences = async () => {
-    if (!editedPreferences) return;
-    
+  const handlePreferencesSave = async (newPreferences: any) => {
     setIsSaving(true);
     try {
-      await updatePreferences(editedPreferences);
+      await updatePreferences({
+        ...newPreferences,
+        onboardingCompleted: true
+      });
       await savePreferences();
       setShowPreferencesModal(false);
+      // Reload topics with new preferences
+      setIsLoading(true);
     } catch (error) {
       console.error('Error saving preferences:', error);
       setError('Failed to save preferences. Please try again.');
@@ -81,92 +77,15 @@ const Dashboard: React.FC = () => {
     }
   };
 
-  const PreferencesModal = () => (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <motion.div
-        initial={{ opacity: 0, scale: 0.95 }}
-        animate={{ opacity: 1, scale: 1 }}
-        exit={{ opacity: 0, scale: 0.95 }}
-        className="bg-white rounded-xl shadow-xl p-6 max-w-lg w-full mx-4"
-      >
-        <h2 className="text-2xl font-semibold mb-4">Update Learning Preferences</h2>
-        
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-neutral-700 mb-1">
-              Subject
-            </label>
-            <input
-              type="text"
-              value={editedPreferences?.subject || ''}
-              onChange={(e) => setEditedPreferences(prev => ({
-                ...prev!,
-                subject: e.target.value
-              }))}
-              className="input"
-              placeholder="e.g., Python Programming"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-neutral-700 mb-1">
-              Knowledge Level
-            </label>
-            <select
-              value={editedPreferences?.knowledgeLevel || 'beginner'}
-              onChange={(e) => setEditedPreferences(prev => ({
-                ...prev!,
-                knowledgeLevel: e.target.value as any
-              }))}
-              className="input"
-            >
-              <option value="beginner">Beginner</option>
-              <option value="intermediate">Intermediate</option>
-              <option value="advanced">Advanced</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-neutral-700 mb-1">
-              Language
-            </label>
-            <select
-              value={editedPreferences?.language || 'english'}
-              onChange={(e) => setEditedPreferences(prev => ({
-                ...prev!,
-                language: e.target.value as any
-              }))}
-              className="input"
-            >
-              <option value="english">English</option>
-              <option value="spanish">Spanish</option>
-              <option value="french">French</option>
-              <option value="german">German</option>
-              <option value="chinese">Chinese</option>
-              <option value="japanese">Japanese</option>
-              <option value="hindi">Hindi</option>
-            </select>
-          </div>
-        </div>
-
-        <div className="mt-6 flex justify-end gap-3">
-          <button
-            onClick={() => setShowPreferencesModal(false)}
-            className="btn btn-secondary"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleSavePreferences}
-            disabled={isSaving}
-            className="btn btn-primary"
-          >
-            {isSaving ? 'Saving...' : 'Save Changes'}
-          </button>
-        </div>
-      </motion.div>
-    </div>
-  );
+  if (showPreferencesModal) {
+    return (
+      <Onboarding 
+        isEditing={true}
+        onComplete={handlePreferencesSave}
+        onCancel={() => setShowPreferencesModal(false)}
+      />
+    );
+  }
 
   if (isLoading) {
     return (
@@ -201,10 +120,7 @@ const Dashboard: React.FC = () => {
               </div>
               
               <button
-                onClick={() => {
-                  setEditedPreferences(preferences);
-                  setShowPreferencesModal(true);
-                }}
+                onClick={() => setShowPreferencesModal(true)}
                 className="bg-white/10 hover:bg-white/20 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors"
               >
                 <Edit className="h-4 w-4" />
@@ -323,9 +239,6 @@ const Dashboard: React.FC = () => {
           </div>
         </div>
       </div>
-
-      {/* Preferences Modal */}
-      {showPreferencesModal && <PreferencesModal />}
     </div>
   );
 };

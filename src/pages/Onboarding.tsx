@@ -5,6 +5,12 @@ import { ChevronRight, ChevronLeft, BookOpen, User, Globe, Target, GraduationCap
 import { useUserPreferences, KnowledgeLevel, Language } from '../contexts/UserPreferencesContext';
 import { useAuth } from '../contexts/AuthContext';
 
+interface OnboardingProps {
+  isEditing?: boolean;
+  onComplete?: (preferences: any) => void;
+  onCancel?: () => void;
+}
+
 const steps = [
   { id: 'subject', title: 'Subject', description: 'What would you like to learn?' },
   { id: 'level', title: 'Knowledge Level', description: 'What\'s your current expertise?' },
@@ -12,7 +18,7 @@ const steps = [
   { id: 'goals', title: 'Learning Goals', description: 'What do you want to achieve?' },
 ];
 
-const Onboarding: React.FC = () => {
+const Onboarding: React.FC<OnboardingProps> = ({ isEditing = false, onComplete, onCancel }) => {
   const { user } = useAuth();
   const { preferences, updatePreferences, savePreferences } = useUserPreferences();
   const navigate = useNavigate();
@@ -23,16 +29,16 @@ const Onboarding: React.FC = () => {
   // Form state
   const [subject, setSubject] = useState(preferences?.subject || '');
   const [knowledgeLevel, setKnowledgeLevel] = useState<KnowledgeLevel>(preferences?.knowledgeLevel || 'beginner');
-  const [language, setLanguage] = useState<Language>(preferences?.language || 'english');
+  const [language, setLanguage] = useState<Language>(preferences?.language || 'English');
   const [learningGoals, setLearningGoals] = useState<string[]>(preferences?.learningGoals || []);
   const [customGoal, setCustomGoal] = useState('');
 
   // Check if preferences exist and redirect if onboarding is completed
   useEffect(() => {
-    if (preferences?.onboardingCompleted) {
+    if (!isEditing && preferences?.onboardingCompleted) {
       navigate('/dashboard');
     }
-  }, [preferences, navigate]);
+  }, [preferences, navigate, isEditing]);
   
   // Common goals options
   const commonGoals = [
@@ -73,6 +79,8 @@ const Onboarding: React.FC = () => {
   const prevStep = () => {
     if (currentStep > 0) {
       setCurrentStep(prev => prev - 1);
+    } else if (isEditing && onCancel) {
+      onCancel();
     }
   };
   
@@ -99,7 +107,6 @@ const Onboarding: React.FC = () => {
     setIsSubmitting(true);
     
     try {
-      // Update preferences locally first
       const newPreferences = {
         subject,
         knowledgeLevel,
@@ -107,13 +114,14 @@ const Onboarding: React.FC = () => {
         learningGoals,
         onboardingCompleted: true
       };
-      
-      // Update context and save to database
-      await updatePreferences(newPreferences);
-      await savePreferences();
-      
-      // Navigate to dashboard
-      navigate('/dashboard');
+
+      if (isEditing && onComplete) {
+        await onComplete(newPreferences);
+      } else {
+        await updatePreferences(newPreferences);
+        await savePreferences();
+        navigate('/dashboard');
+      }
     } catch (error) {
       console.error('Error saving preferences:', error);
       setIsSubmitting(false);
@@ -251,13 +259,13 @@ const Onboarding: React.FC = () => {
                   onChange={(e) => setLanguage(e.target.value as Language)}
                   className="input pl-10 pr-10 appearance-none"
                 >
-                  <option value="english">English</option>
-                  <option value="spanish">Hindi</option>
-                  <option value="french">Malayalam</option>
-                  <option value="german">Tamil</option>
-                  <option value="chinese">Kannada</option>
-                  <option value="japanese">Marati</option>
-                  <option value="hindi">Telugu</option>
+                  <option value="English">English</option>
+                  <option value="Hindi">Hindi</option>
+                  <option value="Malayalam">Malayalam</option>
+                  <option value="Tamil">Tamil</option>
+                  <option value="Kannada">Kannada</option>
+                  <option value="Telugue">Telugu</option>
+                  <option value="Marati">Marathi</option>
                 </select>
                 <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
                   <ChevronRight className="h-5 w-5 text-neutral-400" />
@@ -416,8 +424,15 @@ const Onboarding: React.FC = () => {
       <div className="max-w-4xl mx-auto">
         <div className="text-center mb-12">
           <Graduation className="h-16 w-16 text-primary-600 mx-auto" />
-          <h1 className="mt-4 text-3xl font-bold text-primary-900">Set Up Your Learning Journey</h1>
-          <p className="mt-2 text-neutral-600">Tell us about yourself so we can personalize your learning experience</p>
+          <h1 className="mt-4 text-3xl font-bold text-primary-900">
+            {isEditing ? 'Update Your Learning Preferences' : 'Set Up Your Learning Journey'}
+          </h1>
+          <p className="mt-2 text-neutral-600">
+            {isEditing 
+              ? 'Modify your preferences to better suit your learning needs'
+              : 'Tell us about yourself so we can personalize your learning experience'
+            }
+          </p>
         </div>
         
         <div className="bg-white rounded-xl shadow-sm border border-neutral-200 p-8">
@@ -447,13 +462,10 @@ const Onboarding: React.FC = () => {
             <button
               type="button"
               onClick={prevStep}
-              disabled={currentStep === 0}
-              className={`btn btn-secondary flex items-center ${
-                currentStep === 0 ? 'opacity-50 cursor-not-allowed' : ''
-              }`}
+              className="btn btn-secondary flex items-center"
             >
               <ChevronLeft className="h-5 w-5 mr-1" />
-              Back
+              {currentStep === 0 && isEditing ? 'Cancel' : 'Back'}
             </button>
             
             <button
@@ -474,6 +486,8 @@ const Onboarding: React.FC = () => {
                   <ChevronRight className="h-5 w-5 ml-1" />
                 </>
               ) : (
+                isEditing ? 
+                'Save Changes' :
                 'Complete Setup'
               )}
             </button>
