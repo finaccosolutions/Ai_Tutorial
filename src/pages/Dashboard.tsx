@@ -28,7 +28,11 @@ const Dashboard: React.FC = () => {
   
   // Load topics based on user preferences
   useEffect(() => {
-    if (!preferences?.subject || !preferences?.knowledgeLevel || !preferences?.language) return;
+    // Only proceed if we have all required data
+    if (!preferences?.subject || !preferences?.knowledgeLevel || !preferences?.language || !geminiApiKey) {
+      setIsLoading(false);
+      return;
+    }
 
     const loadTopics = async () => {
       setIsLoading(true);
@@ -51,7 +55,7 @@ const Dashboard: React.FC = () => {
     };
 
     loadTopics();
-  }, [preferences?.subject, preferences?.knowledgeLevel, preferences?.language]);
+  }, [preferences?.subject, preferences?.knowledgeLevel, preferences?.language, geminiApiKey]);
 
   const handleStartLesson = (topic: Topic) => {
     localStorage.setItem('selectedTopic', JSON.stringify(topic));

@@ -85,16 +85,38 @@ export const UserPreferencesProvider: React.FC<{ children: React.ReactNode }> = 
     setPreferences(updatedPreferences as UserPreferences);
 
     try {
-      const { error } = await supabase
+      const prefsData = {
+        user_id: user.id,
+        subject: updatedPreferences.subject,
+        knowledge_level: updatedPreferences.knowledgeLevel,
+        language: updatedPreferences.language,
+        learning_goals: updatedPreferences.learningGoals,
+        onboarding_completed: updatedPreferences.onboardingCompleted
+      };
+
+      // First try to update existing preferences
+      const { data: existingPrefs, error: checkError } = await supabase
         .from('user_preferences')
-        .upsert({
-          user_id: user.id,
-          subject: updatedPreferences.subject,
-          knowledge_level: updatedPreferences.knowledgeLevel,
-          language: updatedPreferences.language,
-          learning_goals: updatedPreferences.learningGoals,
-          onboarding_completed: updatedPreferences.onboardingCompleted
-        });
+        .select('id')
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      if (checkError) throw checkError;
+
+      let error;
+
+      if (existingPrefs) {
+        // Update existing preferences
+        ({ error } = await supabase
+          .from('user_preferences')
+          .update(prefsData)
+          .eq('user_id', user.id));
+      } else {
+        // Insert new preferences
+        ({ error } = await supabase
+          .from('user_preferences')
+          .insert([prefsData]));
+      }
 
       if (error) throw error;
     } catch (error) {
@@ -108,16 +130,38 @@ export const UserPreferencesProvider: React.FC<{ children: React.ReactNode }> = 
     if (!user || !preferences) return;
     
     try {
-      const { error } = await supabase
+      const prefsData = {
+        user_id: user.id,
+        subject: preferences.subject,
+        knowledge_level: preferences.knowledgeLevel,
+        language: preferences.language,
+        learning_goals: preferences.learningGoals,
+        onboarding_completed: preferences.onboardingCompleted
+      };
+
+      // First try to update existing preferences
+      const { data: existingPrefs, error: checkError } = await supabase
         .from('user_preferences')
-        .upsert({
-          user_id: user.id,
-          subject: preferences.subject,
-          knowledge_level: preferences.knowledgeLevel,
-          language: preferences.language,
-          learning_goals: preferences.learningGoals,
-          onboarding_completed: preferences.onboardingCompleted
-        });
+        .select('id')
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      if (checkError) throw checkError;
+
+      let error;
+
+      if (existingPrefs) {
+        // Update existing preferences
+        ({ error } = await supabase
+          .from('user_preferences')
+          .update(prefsData)
+          .eq('user_id', user.id));
+      } else {
+        // Insert new preferences
+        ({ error } = await supabase
+          .from('user_preferences')
+          .insert([prefsData]));
+      }
 
       if (error) throw error;
     } catch (error) {
