@@ -167,12 +167,12 @@ const Settings: React.FC = () => {
                       onChange={(e) => setLanguage(e.target.value as Language)}
                     >
                       <option value="english">English</option>
-                      <option value="spanish">Spanish</option>
-                      <option value="french">French</option>
-                      <option value="german">German</option>
-                      <option value="chinese">Chinese</option>
-                      <option value="japanese">Japanese</option>
-                      <option value="hindi">Hindi</option>
+                      <option value="spanish">Hindi</option>
+                      <option value="french">Malayalam</option>
+                      <option value="german">Tamil</option>
+                      <option value="chinese">Kannada</option>
+                      <option value="japanese">Marati</option>
+                      <option value="hindi">Telugu</option>
                     </select>
                   </div>
                 </div>

@@ -16,7 +16,7 @@ export interface UserPreferences {
 
 interface UserPreferencesContextType {
   preferences: UserPreferences | null;
-  updatePreferences: (newPreferences: Partial<UserPreferences>) => void;
+  updatePreferences: (newPreferences: Partial<UserPreferences>) => Promise<void>;
   savePreferences: () => Promise<void>;
 }
 
@@ -24,7 +24,7 @@ interface UserPreferencesContextType {
 const defaultPreferences: UserPreferences = {
   subject: '',
   knowledgeLevel: 'beginner',
-  language: 'english',
+  language: 'English',
   learningGoals: [],
   onboardingCompleted: false
 };
@@ -42,7 +42,6 @@ export const UserPreferencesProvider: React.FC<{ children: React.ReactNode }> = 
     if (user) {
       const loadPreferences = async () => {
         try {
-          // Use maybeSingle() instead of single() to handle cases where no preferences exist
           const { data, error } = await supabase
             .from('user_preferences')
             .select('*')
@@ -51,7 +50,6 @@ export const UserPreferencesProvider: React.FC<{ children: React.ReactNode }> = 
 
           if (error) {
             console.error('Error loading preferences:', error);
-            setPreferences(defaultPreferences);
             return;
           }
 
@@ -59,30 +57,13 @@ export const UserPreferencesProvider: React.FC<{ children: React.ReactNode }> = 
             setPreferences({
               subject: data.subject || '',
               knowledgeLevel: data.knowledge_level || 'beginner',
-              language: data.language || 'english',
+              language: data.language || 'English',
               learningGoals: data.learning_goals || [],
               onboardingCompleted: data.onboarding_completed || false
             });
-          } else {
-                        // If no preferences exist yet, create them
-            const { error: insertError } = await supabase
-              .from('user_preferences')
-              .insert({
-                user_id: user.id,
-                subject: defaultPreferences.subject,
-                knowledge_level: defaultPreferences.knowledgeLevel,
-                language: defaultPreferences.language,
-                learning_goals: defaultPreferences.learningGoals,
-                onboarding_completed: defaultPreferences.onboardingCompleted
-              });
-
-            if (insertError) {
-              console.error('Error creating default preferences:', insertError);
-            }
           }
         } catch (error) {
           console.error('Error loading preferences:', error);
-          setPreferences(defaultPreferences);
         }
       };
 
@@ -92,35 +73,51 @@ export const UserPreferencesProvider: React.FC<{ children: React.ReactNode }> = 
     }
   }, [user]);
 
-  // Update preferences locally
-  const updatePreferences = (newPreferences: Partial<UserPreferences>) => {
-    setPreferences(prev => {
-      if (!prev) return null;
-      return { ...prev, ...newPreferences };
-    });
+  // Update preferences locally and in database
+  const updatePreferences = async (newPreferences: Partial<UserPreferences>) => {
+    if (!user) return;
+
+    const updatedPreferences = {
+      ...preferences,
+      ...newPreferences
+    };
+
+    setPreferences(updatedPreferences as UserPreferences);
+
+    try {
+      const { error } = await supabase
+        .from('user_preferences')
+        .upsert({
+          user_id: user.id,
+          subject: updatedPreferences.subject,
+          knowledge_level: updatedPreferences.knowledgeLevel,
+          language: updatedPreferences.language,
+          learning_goals: updatedPreferences.learningGoals,
+          onboarding_completed: updatedPreferences.onboardingCompleted
+        });
+
+      if (error) throw error;
+    } catch (error) {
+      console.error('Error updating preferences:', error);
+      throw error;
+    }
   };
 
-  // Save preferences to Supabase
+  // Save preferences to database
   const savePreferences = async () => {
     if (!user || !preferences) return;
     
     try {
       const { error } = await supabase
         .from('user_preferences')
-        .upsert(
-          {
-            user_id: user.id,
-            subject: preferences.subject,
-            knowledge_level: preferences.knowledgeLevel,
-            language: preferences.language,
-            learning_goals: preferences.learningGoals,
-            onboarding_completed: preferences.onboardingCompleted
-          },
-          {
-            onConflict: 'user_id',
-            ignoreDuplicates: false
-          }
-        );
+        .upsert({
+          user_id: user.id,
+          subject: preferences.subject,
+          knowledge_level: preferences.knowledgeLevel,
+          language: preferences.language,
+          learning_goals: preferences.learningGoals,
+          onboarding_completed: preferences.onboardingCompleted
+        });
 
       if (error) throw error;
     } catch (error) {

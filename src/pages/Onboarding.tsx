@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ChevronRight, ChevronLeft, BookOpen, User, Globe, Target, GraduationCap as Graduation } from 'lucide-react';
 import { useUserPreferences, KnowledgeLevel, Language } from '../contexts/UserPreferencesContext';
+import { useAuth } from '../contexts/AuthContext';
 
 const steps = [
   { id: 'subject', title: 'Subject', description: 'What would you like to learn?' },
@@ -12,6 +13,7 @@ const steps = [
 ];
 
 const Onboarding: React.FC = () => {
+  const { user } = useAuth();
   const { preferences, updatePreferences, savePreferences } = useUserPreferences();
   const navigate = useNavigate();
   
@@ -19,11 +21,18 @@ const Onboarding: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   
   // Form state
-  const [subject, setSubject] = useState('');
-  const [knowledgeLevel, setKnowledgeLevel] = useState<KnowledgeLevel>('beginner');
-  const [language, setLanguage] = useState<Language>('english');
-  const [learningGoals, setLearningGoals] = useState<string[]>([]);
+  const [subject, setSubject] = useState(preferences?.subject || '');
+  const [knowledgeLevel, setKnowledgeLevel] = useState<KnowledgeLevel>(preferences?.knowledgeLevel || 'beginner');
+  const [language, setLanguage] = useState<Language>(preferences?.language || 'english');
+  const [learningGoals, setLearningGoals] = useState<string[]>(preferences?.learningGoals || []);
   const [customGoal, setCustomGoal] = useState('');
+
+  // Check if preferences exist and redirect if onboarding is completed
+  useEffect(() => {
+    if (preferences?.onboardingCompleted) {
+      navigate('/dashboard');
+    }
+  }, [preferences, navigate]);
   
   // Common goals options
   const commonGoals = [
@@ -85,6 +94,8 @@ const Onboarding: React.FC = () => {
   
   // Complete onboarding
   const completeOnboarding = async () => {
+    if (!user) return;
+    
     setIsSubmitting(true);
     
     try {
@@ -97,10 +108,8 @@ const Onboarding: React.FC = () => {
         onboardingCompleted: true
       };
       
-      // Update context
+      // Update context and save to database
       await updatePreferences(newPreferences);
-      
-      // Save to database
       await savePreferences();
       
       // Navigate to dashboard
@@ -243,12 +252,12 @@ const Onboarding: React.FC = () => {
                   className="input pl-10 pr-10 appearance-none"
                 >
                   <option value="english">English</option>
-                  <option value="spanish">Spanish</option>
-                  <option value="french">French</option>
-                  <option value="german">German</option>
-                  <option value="chinese">Chinese</option>
-                  <option value="japanese">Japanese</option>
-                  <option value="hindi">Hindi</option>
+                  <option value="spanish">Hindi</option>
+                  <option value="french">Malayalam</option>
+                  <option value="german">Tamil</option>
+                  <option value="chinese">Kannada</option>
+                  <option value="japanese">Marati</option>
+                  <option value="hindi">Telugu</option>
                 </select>
                 <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
                   <ChevronRight className="h-5 w-5 text-neutral-400" />

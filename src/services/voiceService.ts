@@ -29,17 +29,22 @@ export const speak = (
   // Wait for voices to be loaded
   const loadVoices = () => {
     const voices = window.speechSynthesis.getVoices();
-    const englishVoices = voices.filter(voice => voice.lang.includes('en'));
-    const femaleVoices = englishVoices.filter(voice => 
-      voice.name.toLowerCase().includes('female') || 
-      voice.name.includes('Samantha') ||
-      voice.name.includes('Victoria')
+    
+    // Try to find a voice in the user's preferred language
+    const preferredVoices = voices.filter(voice => 
+      voice.lang.toLowerCase().includes('en') || 
+      voice.lang.toLowerCase().includes('hi') ||
+      voice.lang.toLowerCase().includes('ml') ||
+      voice.lang.toLowerCase().includes('ta') ||
+      voice.lang.toLowerCase().includes('kn') ||
+      voice.lang.toLowerCase().includes('te') ||
+      voice.lang.toLowerCase().includes('mr')
     );
     
-    if (femaleVoices.length > 0) {
-      utterance.voice = femaleVoices[0];
-    } else if (englishVoices.length > 0) {
-      utterance.voice = englishVoices[0];
+    if (preferredVoices.length > 0) {
+      utterance.voice = preferredVoices[0];
+    } else {
+      utterance.voice = voices[0];
     }
     
     // Set properties
@@ -59,58 +64,50 @@ export const speak = (
     utterance.onerror = (event) => {
       console.error('Speech synthesis error:', event);
       
-      // Only handle error if this is still the current utterance
       if (currentUtterance !== utterance) {
         return;
       }
 
-      // Check if we should retry
       if (retryCount < MAX_RETRIES) {
         retryCount++;
         console.log(`Retrying speech synthesis (attempt ${retryCount}/${MAX_RETRIES})`);
         
         setTimeout(() => {
           try {
-            // Ensure we're not already speaking and this is still the current utterance
             if (!window.speechSynthesis.speaking && currentUtterance === utterance) {
-              window.speechSynthesis.cancel(); // Clear any pending speech
-              window.speechSynthesis.resume(); // Ensure synthesis isn't paused
+              window.speechSynthesis.cancel();
+              window.speechSynthesis.resume();
               window.speechSynthesis.speak(utterance);
             }
           } catch (error) {
             console.error('Failed to retry speech:', error);
           }
-        }, RETRY_DELAY * retryCount); // Increase delay with each retry
+        }, RETRY_DELAY * retryCount);
       } else {
-        // Max retries reached, reset state
         console.error('Max retries reached for speech synthesis');
         currentUtterance = null;
         retryCount = 0;
-        if (onEnd) onEnd(); // Call onEnd to allow presentation to continue
+        if (onEnd) onEnd();
       }
     };
     
-    // Start speaking
     try {
-      // Ensure we're not already speaking
       if (!window.speechSynthesis.speaking) {
-        window.speechSynthesis.cancel(); // Clear any pending speech
-        window.speechSynthesis.resume(); // Ensure synthesis isn't paused
+        window.speechSynthesis.cancel();
+        window.speechSynthesis.resume();
         window.speechSynthesis.speak(utterance);
       }
     } catch (error) {
       console.error('Failed to start speech:', error);
       currentUtterance = null;
-      if (onEnd) onEnd(); // Call onEnd to allow presentation to continue
+      if (onEnd) onEnd();
     }
   };
 
-  // Check if voices are already loaded
   const voices = window.speechSynthesis.getVoices();
   if (voices.length > 0) {
     loadVoices();
   } else {
-    // Wait for voices to be loaded
     window.speechSynthesis.onvoiceschanged = loadVoices;
   }
   
@@ -122,7 +119,7 @@ export const stopSpeaking = (): void => {
   if (window.speechSynthesis) {
     try {
       window.speechSynthesis.cancel();
-      window.speechSynthesis.resume(); // Ensure synthesis isn't paused
+      window.speechSynthesis.resume();
       currentUtterance = null;
       retryCount = 0;
     } catch (error) {
