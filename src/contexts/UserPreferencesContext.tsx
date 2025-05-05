@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useAuth } from './AuthContext';
+import { supabase } from '../lib/supabase';
 
 // Types
 export type KnowledgeLevel = 'beginner' | 'intermediate' | 'advanced';
@@ -39,12 +40,28 @@ export const UserPreferencesProvider: React.FC<{ children: React.ReactNode }> = 
   // Load preferences when user changes
   useEffect(() => {
     if (user) {
-      const loadPreferences = () => {
+      const loadPreferences = async () => {
         try {
-          // In a real app, fetch from API/database
-          const storedPrefs = localStorage.getItem(`preferences_${user.id}`);
-          if (storedPrefs) {
-            setPreferences(JSON.parse(storedPrefs));
+          const { data, error } = await supabase
+            .from('user_preferences')
+            .select('*')
+            .eq('user_id', user.id)
+            .single();
+
+          if (error) {
+            console.error('Error loading preferences:', error);
+            setPreferences(defaultPreferences);
+            return;
+          }
+
+          if (data) {
+            setPreferences({
+              subject: data.subject || '',
+              knowledgeLevel: data.knowledge_level || 'beginner',
+              language: data.language || 'english',
+              learningGoals: data.learning_goals || [],
+              onboardingCompleted: data.onboarding_completed || false
+            });
           } else {
             setPreferences(defaultPreferences);
           }
@@ -68,19 +85,23 @@ export const UserPreferencesProvider: React.FC<{ children: React.ReactNode }> = 
     });
   };
 
-  // Save preferences to persistent storage
+  // Save preferences to Supabase
   const savePreferences = async () => {
     if (!user || !preferences) return;
     
     try {
-      // In a real app, send to API/database
-      localStorage.setItem(`preferences_${user.id}`, JSON.stringify(preferences));
-      
-      // Update user.onboardingCompleted if needed
-      if (preferences.onboardingCompleted) {
-        const updatedUser = { ...user, onboardingCompleted: true };
-        localStorage.setItem('user', JSON.stringify(updatedUser));
-      }
+      const { error } = await supabase
+        .from('user_preferences')
+        .upsert({
+          user_id: user.id,
+          subject: preferences.subject,
+          knowledge_level: preferences.knowledgeLevel,
+          language: preferences.language,
+          learning_goals: preferences.learningGoals,
+          onboarding_completed: preferences.onboardingCompleted
+        });
+
+      if (error) throw error;
     } catch (error) {
       console.error('Error saving preferences:', error);
       throw error;

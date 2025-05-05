@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Play, BookOpen, User2, Settings, Clock, Target, Award } from 'lucide-react';
+import { Play, BookOpen, User2, Settings, Clock, Target, Award, RefreshCw } from 'lucide-react';
 import { useUserPreferences } from '../contexts/UserPreferencesContext';
 import { useAuth } from '../contexts/AuthContext';
 import geminiService, { Topic } from '../services/geminiService';
@@ -14,6 +14,7 @@ const Dashboard: React.FC = () => {
   const [topics, setTopics] = useState<Topic[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isChangingPreferences, setIsChangingPreferences] = useState(false);
   
   // Check if API key is set
   useEffect(() => {
@@ -32,45 +33,51 @@ const Dashboard: React.FC = () => {
   
   // Load topics based on user preferences
   useEffect(() => {
-    const storedTopics = localStorage.getItem('learningTopics');
-    if (storedTopics) {
-      setTopics(JSON.parse(storedTopics));
-      setIsLoading(false);
-      return;
-    }
-
-    if (preferences?.subject && preferences?.knowledgeLevel && preferences?.language) {
-      loadTopics();
-    }
-  }, [preferences?.subject, preferences?.knowledgeLevel, preferences?.language]);
-
-  const loadTopics = async () => {
     if (!preferences?.subject || !preferences?.knowledgeLevel || !preferences?.language) return;
-    
-    setIsLoading(true);
-    setError(null);
-    try {
-      const topics = await geminiService.generateTopicsList(
-        preferences.subject,
-        preferences.knowledgeLevel,
-        preferences.language,
-        preferences.learningGoals || []
-      );
-      setTopics(topics);
-      // Store topics in localStorage
-      localStorage.setItem('learningTopics', JSON.stringify(topics));
-    } catch (error: any) {
-      console.error('Error loading topics:', error);
-      setError(error.message || 'Failed to load topics. Please try again.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
+
+    const loadTopics = async () => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        // Try to load cached topics first
+        const cachedTopics = localStorage.getItem(`topics_${preferences.subject}`);
+        if (cachedTopics && !isChangingPreferences) {
+          setTopics(JSON.parse(cachedTopics));
+          setIsLoading(false);
+          return;
+        }
+
+        // Generate new topics if cache doesn't exist or preferences changed
+        const topics = await geminiService.generateTopicsList(
+          preferences.subject,
+          preferences.knowledgeLevel,
+          preferences.language,
+          preferences.learningGoals || []
+        );
+        
+        setTopics(topics);
+        // Cache the topics
+        localStorage.setItem(`topics_${preferences.subject}`, JSON.stringify(topics));
+        setIsChangingPreferences(false);
+      } catch (error: any) {
+        console.error('Error loading topics:', error);
+        setError(error.message || 'Failed to load topics. Please try again.');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadTopics();
+  }, [preferences?.subject, preferences?.knowledgeLevel, preferences?.language, isChangingPreferences]);
 
   const handleStartLesson = (topic: Topic) => {
-    // Store the selected topic in localStorage
     localStorage.setItem('selectedTopic', JSON.stringify(topic));
     navigate(`/lesson/${topic.id}`);
+  };
+
+  const handleChangePreferences = () => {
+    setIsChangingPreferences(true);
+    navigate('/onboarding');
   };
 
   if (isLoading) {
@@ -130,23 +137,17 @@ const Dashboard: React.FC = () => {
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-2xl font-semibold text-neutral-800">Your Learning Path</h2>
               <button
-                onClick={loadTopics}
+                onClick={handleChangePreferences}
                 className="btn btn-secondary flex items-center gap-2"
               >
                 <RefreshCw className="w-4 h-4" />
-                Refresh Topics
+                Change Preferences
               </button>
             </div>
             
             {error ? (
               <div className="bg-error-50 border border-error-200 text-error-700 p-4 rounded-lg mb-6">
                 {error}
-                <button
-                  onClick={loadTopics}
-                  className="ml-4 text-error-700 hover:text-error-800 underline"
-                >
-                  Try Again
-                </button>
               </div>
             ) : (
               <div className="grid gap-6">
