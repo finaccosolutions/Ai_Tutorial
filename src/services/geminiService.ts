@@ -51,6 +51,10 @@ class GeminiService {
     }
   }
 
+  setApiKey(apiKey: string): void {
+    this.initialize(apiKey);
+  }
+
   initialize(apiKey: string): void {
     try {
       this.genAI = new GoogleGenerativeAI(apiKey);

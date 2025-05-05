@@ -61,11 +61,13 @@ const Register: React.FC = () => {
     setIsLoading(true);
     
     try {
-      const { user, error: authError } = await register(email, password, name);
+      const data = await register(email, password, name);
+      const { error: authError } = data || { error: null };
       
       if (authError) throw authError;
       
-      // If registration is successful, navigate to onboarding
+      // If registration is successful, navigate to onboarding regardless of user object
+      // This handles cases where email verification is required
       navigate('/onboarding');
     } catch (err: any) {
       console.error('Registration error:', err);

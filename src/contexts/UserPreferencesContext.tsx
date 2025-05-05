@@ -77,14 +77,15 @@ export const UserPreferencesProvider: React.FC<{ children: React.ReactNode }> = 
   const updatePreferences = async (newPreferences: Partial<UserPreferences>) => {
     if (!user) return;
 
-    const updatedPreferences = {
-      ...preferences,
-      ...newPreferences
-    };
-
-    setPreferences(updatedPreferences as UserPreferences);
-
     try {
+      const updatedPreferences = {
+        ...defaultPreferences,
+        ...preferences,
+        ...newPreferences
+      };
+
+      setPreferences(updatedPreferences as UserPreferences);
+
       const prefsData = {
         user_id: user.id,
         subject: updatedPreferences.subject,
@@ -94,7 +95,7 @@ export const UserPreferencesProvider: React.FC<{ children: React.ReactNode }> = 
         onboarding_completed: updatedPreferences.onboardingCompleted
       };
 
-      // First try to update existing preferences
+      // Check if preferences exist
       const { data: existingPrefs, error: checkError } = await supabase
         .from('user_preferences')
         .select('id')
@@ -139,7 +140,7 @@ export const UserPreferencesProvider: React.FC<{ children: React.ReactNode }> = 
         onboarding_completed: preferences.onboardingCompleted
       };
 
-      // First try to update existing preferences
+      // Check if preferences exist
       const { data: existingPrefs, error: checkError } = await supabase
         .from('user_preferences')
         .select('id')
