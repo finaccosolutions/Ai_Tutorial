@@ -1,8 +1,18 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
+export interface Topic {
+  id: string;
+  title: string;
+  description: string;
+  estimatedDuration: number;
+  difficulty: string;
+  learningObjectives: string[];
+  prerequisites: string[];
+}
+
 interface QuizQuestion {
   question: string;
-  type: 'multiple-choice' | 'fill-blank' | 'true-false' | 'short-answer';
+  type: 'multiple-choice' | 'fill-blank' | 'true-false';
   options?: string[];
   correctAnswer: string | number;
   explanation: string;
@@ -23,7 +33,7 @@ class GeminiService {
     try {
       this.genAI = new GoogleGenerativeAI(apiKey);
       this.model = this.genAI.getGenerativeModel({ 
-        model: "gemini-1.5-pro-002",
+        model: "gemini-2.0-flash",
         generationConfig: {
           temperature: 0.9, // Increased for more variety
           topK: 40,
@@ -64,6 +74,109 @@ class GeminiService {
     cleaned = cleaned.replace(/[""]/g, '"');
     
     return cleaned;
+  }
+
+  async generateTopicsList(
+    subject: string,
+    knowledgeLevel: string,
+    language: string,
+    learningGoals: string[]
+  ): Promise<Topic[]> {
+    if (!this.model) {
+      throw new Error('Gemini API not initialized. Please set API key first.');
+    }
+
+    if (!subject || !knowledgeLevel || !language) {
+      throw new Error('Subject, knowledge level, and language are required to generate topics.');
+    }
+
+    const prompt = `
+      Create a structured learning path for ${subject} tailored for ${knowledgeLevel} level students in ${language}.
+      Consider these learning goals: ${learningGoals.join(', ')}.
+
+      Generate 5-8 comprehensive topics that build upon each other.
+      
+      For each topic include:
+      1. Clear, descriptive title
+      2. Detailed description of what will be covered
+      3. Estimated duration in minutes (realistic for the content)
+      4. Difficulty level (Beginner, Intermediate, Advanced)
+      5. 3-5 specific learning objectives
+      6. Any prerequisites or required knowledge
+      
+      Format as a JSON array with these exact keys:
+      - id (uuid format)
+      - title (string)
+      - description (string)
+      - estimatedDuration (number, in minutes)
+      - difficulty (string)
+      - learningObjectives (string array)
+      - prerequisites (string array)
+      
+      Example format:
+      [
+        {
+          "id": "12345678-1234-5678-1234-567812345678",
+          "title": "Introduction to Variables",
+          "description": "Learn the fundamentals of...",
+          "estimatedDuration": 45,
+          "difficulty": "Beginner",
+          "learningObjectives": ["Understand...", "Learn..."],
+          "prerequisites": ["Basic computer skills"]
+        }
+      ]
+
+      Ensure:
+      - Topics progress logically
+      - Content matches ${knowledgeLevel} level
+      - Clear prerequisites between topics
+      - Realistic time estimates
+      - Learning objectives are specific and measurable
+      - All text is in ${language}
+    `;
+
+    try {
+      return await this.retryWithExponentialBackoff(async () => {
+        const result = await this.model.generateContent({
+          contents: [{ role: "user", parts: [{ text: prompt }] }]
+        });
+        
+        const response = await result.response;
+        const text = response.text();
+        
+        // Clean and parse the response
+        const cleanedText = this.sanitizeJsonResponse(text);
+        
+        try {
+          const topics = JSON.parse(cleanedText);
+
+          // Validate the response format
+          if (!Array.isArray(topics)) {
+            throw new Error('Invalid response format: not an array');
+          }
+
+          // Validate each topic
+          topics.forEach((topic, i) => {
+            if (!topic.id || !topic.title || !topic.description || 
+                !topic.estimatedDuration || !topic.difficulty || 
+                !Array.isArray(topic.learningObjectives) || 
+                !Array.isArray(topic.prerequisites)) {
+              throw new Error(`Invalid topic format at index ${i}`);
+            }
+          });
+
+          return topics;
+        } catch (parseError) {
+          console.error('Error parsing topics:', parseError);
+          throw new Error('Failed to parse topics list. Please try again.');
+        }
+      });
+    } catch (error: any) {
+      console.error('Error generating topics list:', error);
+      throw new Error(
+        `Failed to generate topics list: ${error.message || 'Unknown error occurred'}`
+      );
+    }
   }
 
   async generateQuizQuestions(topic: string, level: string): Promise<QuizQuestion[]> {

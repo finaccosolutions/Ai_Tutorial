@@ -25,7 +25,7 @@ const SlidePresentation: React.FC<SlidePresentationProps> = ({
 }) => {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [imageLoaded, setImageLoaded] = useState(false);
-  const [highlightedText, setHighlightedText] = useState('');
+  const [highlightedWords, setHighlightedWords] = useState<string[]>([]);
   const [currentWordIndex, setCurrentWordIndex] = useState(0);
   const [slideProgress, setSlideProgress] = useState(0);
   const [elapsedTime, setElapsedTime] = useState(0);
@@ -58,6 +58,8 @@ const SlidePresentation: React.FC<SlidePresentationProps> = ({
       wordsRef.current = currentSlide.narration.split(/\s+/).filter(word => word.length > 0);
       slideDurationRef.current = currentSlide.duration;
       slideStartTimeRef.current = performance.now();
+      setHighlightedWords([]);
+      setCurrentWordIndex(0);
     }
   }, [currentSlideIndex, presentation]);
 
@@ -97,11 +99,21 @@ const SlidePresentation: React.FC<SlidePresentationProps> = ({
           }
         },
         1,
-        () => {
-          const elapsed = (performance.now() - slideStartTimeRef.current) / 1000;
-          const wordIndex = Math.floor((elapsed / slideDurationRef.current) * wordsRef.current.length);
-          setCurrentWordIndex(Math.min(wordIndex, wordsRef.current.length - 1));
-          setHighlightedText(wordsRef.current.slice(0, wordIndex + 1).join(' '));
+        (event) => {
+          if (event.charIndex !== undefined) {
+            // Calculate current word based on character index
+            let wordCount = 0;
+            let charCount = 0;
+            for (let i = 0; i < words.length; i++) {
+              charCount += words[i].length + 1; // +1 for space
+              if (event.charIndex < charCount) {
+                wordCount = i;
+                break;
+              }
+            }
+            setCurrentWordIndex(wordCount);
+            setHighlightedWords(words.slice(0, wordCount + 1));
+          }
         }
       );
     }
@@ -135,18 +147,6 @@ const SlidePresentation: React.FC<SlidePresentationProps> = ({
 
     const currentSlide = presentation.slides[currentSlideIndex];
     const slideElapsed = elapsed - (totalDuration - currentSlide.duration);
-    
-    const wordsPerSecond = wordsRef.current.length / currentSlide.duration;
-    const wordIndex = Math.min(
-      Math.floor(slideElapsed * wordsPerSecond),
-      wordsRef.current.length - 1
-    );
-    
-    if (wordIndex !== currentWordIndex && wordIndex >= 0) {
-      setCurrentWordIndex(wordIndex);
-      setHighlightedText(wordsRef.current.slice(0, wordIndex + 1).join(' '));
-    }
-
     const progress = Math.min((slideElapsed / currentSlide.duration) * 100, 100);
     setSlideProgress(progress);
 
@@ -275,13 +275,13 @@ const SlidePresentation: React.FC<SlidePresentationProps> = ({
           >
             <div className="w-full h-full flex flex-col items-center justify-center">
               <motion.div
-                className="bg-white/5 backdrop-blur-lg rounded-3xl shadow-xl p-8 border border-white/10 w-full max-w-5xl"
+                className="bg-white/5 backdrop-blur-lg rounded-3xl shadow-xl p-4 sm:p-8 border border-white/10 w-full max-w-5xl"
                 initial={{ scale: 0.95, y: 20 }}
                 animate={{ scale: 1, y: 0 }}
                 transition={{ duration: 0.4 }}
               >
                 <motion.h2 
-                  className="text-4xl font-bold text-white mb-6 bg-gradient-to-r from-pink-400 via-purple-400 to-indigo-400 bg-clip-text text-transparent"
+                  className="text-2xl sm:text-4xl font-bold text-white mb-6 bg-gradient-to-r from-pink-400 via-purple-400 to-indigo-400 bg-clip-text text-transparent"
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.2 }}
@@ -290,27 +290,19 @@ const SlidePresentation: React.FC<SlidePresentationProps> = ({
                 </motion.h2>
                 
                 <div className="prose prose-xl max-w-none prose-invert">
-                  {currentSlide.narration.split('\n').map((paragraph, i) => (
-                    <motion.p 
-                      key={i}
-                      className="mb-6 leading-relaxed text-white/90 text-lg"
-                      initial={{ opacity: 0, y: 20 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: 0.3 + i * 0.1 }}
-                    >
-                      {!isPaused ? (
-                        <>
-                          <span className="text-pink-300 font-medium">
-                            {highlightedText}
-                          </span>
-                          <span className="text-white/80">
-                            {paragraph.slice(highlightedText.length)}
-                          </span>
-                        </>
-                      ) : (
-                        <span className="text-white/90">{paragraph}</span>
-                      )}
-                    </motion.p>
+                  {currentSlide.narration.split(/\s+/).map((word, i) => (
+                    <React.Fragment key={i}>
+                      <motion.span
+                        className={`inline-block transition-colors duration-200 ${
+                          highlightedWords.includes(word) 
+                            ? 'text-pink-300 font-medium' 
+                            : 'text-white/80'
+                        }`}
+                      >
+                        {word}
+                      </motion.span>
+                      {' '}
+                    </React.Fragment>
                   ))}
                 </div>
               </motion.div>
@@ -318,7 +310,7 @@ const SlidePresentation: React.FC<SlidePresentationProps> = ({
               {/* Visual Aid */}
               {currentSlide.visualAid && (
                 <motion.div
-                  className="mt-8 w-full max-w-4xl"
+                  className="mt-4 sm:mt-8 w-full max-w-4xl px-4"
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ 
                     opacity: imageLoaded ? 1 : 0,
@@ -329,7 +321,7 @@ const SlidePresentation: React.FC<SlidePresentationProps> = ({
                   <img
                     src={currentSlide.visualAid}
                     alt="Visual aid"
-                    className="rounded-xl w-full h-auto max-h-[40vh] object-contain shadow-lg border border-white/20"
+                    className="rounded-xl w-full h-auto max-h-[30vh] sm:max-h-[40vh] object-contain shadow-lg border border-white/20"
                     onLoad={() => setImageLoaded(true)}
                   />
                 </motion.div>
@@ -351,7 +343,6 @@ const SlidePresentation: React.FC<SlidePresentationProps> = ({
             <motion.div
               className="h-full bg-gradient-to-r from-pink-400 to-purple-400 rounded-full"
               style={{ width: `${slideProgress}%` }}
-              animate={{ width: `${slideProgress}%` }}
               transition={{ duration: 0.1 }}
             />
           </div>
@@ -368,17 +359,16 @@ const SlidePresentation: React.FC<SlidePresentationProps> = ({
             <motion.div
               className="absolute inset-0 h-full bg-gradient-to-r from-pink-500 via-purple-500 to-indigo-500 rounded-full"
               style={{ width: `${progressPercentage}%` }}
-              animate={{ width: `${progressPercentage}%` }}
               transition={{ duration: 0.1 }}
             />
           </div>
-          <span className="text-sm text-white/60 tabular-nums">
+          <span className="text-sm text-white/60 tabular-nums hidden sm:inline">
             {formatTime(elapsedTime)}/{formatTime(totalDuration)}
           </span>
         </div>
 
         {/* Control buttons */}
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap sm:flex-nowrap items-center justify-between gap-4">
           <div className="flex items-center space-x-3">
             <motion.button
               onClick={onPlayPause}
@@ -418,7 +408,7 @@ const SlidePresentation: React.FC<SlidePresentationProps> = ({
               onClick={toggleFullscreen}
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
-              className="p-2 rounded-full bg-white/20"
+              className="p-2 rounded-full bg-white/20 hidden sm:flex"
             >
               <Maximize2 className="w-4 h-4 text-white" />
             </motion.button>
