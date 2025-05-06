@@ -149,17 +149,6 @@ const SlidePresentation: React.FC<SlidePresentationProps> = ({
     const currentSlide = presentation.slides[currentSlideIndex];
     const slideElapsed = elapsed - (totalDuration - currentSlide.duration);
     
-    const wordsPerSecond = wordsRef.current.length / currentSlide.duration;
-    const wordIndex = Math.min(
-      Math.floor(slideElapsed * wordsPerSecond),
-      wordsRef.current.length - 1
-    );
-    
-    if (wordIndex !== currentWordIndex && wordIndex >= 0) {
-      setCurrentWordIndex(wordIndex);
-      setHighlightedText(wordsRef.current.slice(0, wordIndex + 1).join(' '));
-    }
-
     const progress = Math.min((slideElapsed / currentSlide.duration) * 100, 100);
     setSlideProgress(progress);
 
@@ -405,23 +394,6 @@ const SlidePresentation: React.FC<SlidePresentationProps> = ({
                 <Play className="w-5 h-5 text-white" />
               ) : (
                 <Pause className="w-5 h-5 text-white" />
-              )}
-            </motion.button>
-
-            <motion.button
-              onClick={() => setIsSpeakingEnabled(!isSpeakingEnabled)}
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              className={`p-2 rounded-full ${
-                isSpeakingEnabled 
-                  ? 'bg-purple-500/50' 
-                  : 'bg-white/20'
-              }`}
-            >
-              {isSpeakingEnabled ? (
-                <Volume2 className="w-4 h-4 text-white" />
-              ) : (
-                <VolumeX className="w-4 h-4 text-white" />
               )}
             </motion.button>
 
