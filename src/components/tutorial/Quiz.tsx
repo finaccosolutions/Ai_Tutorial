@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { CheckCircle2, XCircle, AlertCircle, Award, Brain, Timer, ArrowRight } from 'lucide-react';
+import { CheckCircle2, XCircle, AlertCircle, Award, Brain, ArrowRight, X } from 'lucide-react';
 import geminiService from '../../services/geminiService';
 
 interface QuizProps {
@@ -11,10 +11,10 @@ interface QuizProps {
 
 interface QuizQuestion {
   question: string;
-  options: string[];
-  correctAnswer: number;
+  type: 'multiple-choice' | 'fill-blank' | 'true-false' | 'short-answer';
+  options?: string[];
+  correctAnswer: string | number;
   explanation: string;
-  type: 'multiple-choice' | 'coding';
   codeSnippet?: string;
 }
 
@@ -25,12 +25,11 @@ const Quiz: React.FC<QuizProps> = ({
 }) => {
   const [questions, setQuestions] = useState<QuizQuestion[]>([]);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
-  const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
+  const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
   const [showFeedback, setShowFeedback] = useState(false);
   const [score, setScore] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
-  const [userCode, setUserCode] = useState('');
-  const [timeLeft, setTimeLeft] = useState(30);
+  const [userAnswer, setUserAnswer] = useState('');
   const [quizCompleted, setQuizCompleted] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -39,23 +38,6 @@ const Quiz: React.FC<QuizProps> = ({
       loadQuizQuestions();
     }
   }, [topic, knowledgeLevel]);
-
-  useEffect(() => {
-    if (!showFeedback && !quizCompleted && questions.length > 0) {
-      const timer = setInterval(() => {
-        setTimeLeft((prev) => {
-          if (prev <= 1) {
-            clearInterval(timer);
-            handleAnswer(-1); // Auto-submit on timeout
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-
-      return () => clearInterval(timer);
-    }
-  }, [showFeedback, currentQuestionIndex, quizCompleted, questions.length]);
 
   const loadQuizQuestions = async () => {
     if (!topic || !knowledgeLevel) {
@@ -69,8 +51,7 @@ const Quiz: React.FC<QuizProps> = ({
     try {
       const response = await geminiService.generateQuizQuestions(topic, knowledgeLevel);
       setQuestions(response);
-      setTimeLeft(30);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error loading quiz questions:', error);
       setError('Failed to load quiz questions. Please try again.');
     } finally {
@@ -78,17 +59,29 @@ const Quiz: React.FC<QuizProps> = ({
     }
   };
 
-  const handleAnswer = (index: number) => {
+  const handleAnswer = () => {
     if (!questions.length) return;
     
     const currentQuestion = questions[currentQuestionIndex];
-    const isCorrect = index === currentQuestion.correctAnswer;
+    let isCorrect = false;
+
+    switch (currentQuestion.type) {
+      case 'multiple-choice':
+        isCorrect = selectedAnswer === currentQuestion.correctAnswer.toString();
+        break;
+      case 'fill-blank':
+      case 'short-answer':
+        isCorrect = userAnswer.toLowerCase().trim() === currentQuestion.correctAnswer.toString().toLowerCase().trim();
+        break;
+      case 'true-false':
+        isCorrect = selectedAnswer === currentQuestion.correctAnswer.toString();
+        break;
+    }
     
     if (isCorrect) {
       setScore(score + 1);
     }
     
-    setSelectedAnswer(index);
     setShowFeedback(true);
   };
 
@@ -96,12 +89,121 @@ const Quiz: React.FC<QuizProps> = ({
     if (currentQuestionIndex < questions.length - 1) {
       setCurrentQuestionIndex(currentQuestionIndex + 1);
       setSelectedAnswer(null);
+      setUserAnswer('');
       setShowFeedback(false);
-      setTimeLeft(30);
-      setUserCode('');
     } else {
       setQuizCompleted(true);
       onComplete(score === questions.length);
+    }
+  };
+
+  const renderQuestionContent = () => {
+    const currentQuestion = questions[currentQuestionIndex];
+
+    switch (currentQuestion.type) {
+      case 'multiple-choice':
+        return (
+          <div className="space-y-3">
+            {currentQuestion.options?.map((option, index) => (
+              <button
+                key={index}
+                onClick={() => setSelectedAnswer(index.toString())}
+                disabled={showFeedback}
+                className={`w-full p-4 rounded-lg border-2 transition-all ${
+                  showFeedback
+                    ? index.toString() === currentQuestion.correctAnswer.toString()
+                      ? 'border-success-500 bg-success-50'
+                      : index.toString() === selectedAnswer
+                      ? 'border-error-500 bg-error-50'
+                      : 'border-neutral-200 bg-neutral-50'
+                    : selectedAnswer === index.toString()
+                    ? 'border-primary-500 bg-primary-50'
+                    : 'border-neutral-200 hover:border-primary-500 hover:bg-primary-50'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <span className={`text-left ${
+                    showFeedback
+                      ? index.toString() === currentQuestion.correctAnswer.toString()
+                        ? 'text-success-700'
+                        : index.toString() === selectedAnswer
+                        ? 'text-error-700'
+                        : 'text-neutral-500'
+                      : 'text-neutral-700'
+                  }`}>
+                    {option}
+                  </span>
+                  
+                  {showFeedback && (
+                    <AnimatePresence>
+                      {index.toString() === currentQuestion.correctAnswer.toString() ? (
+                        <motion.div
+                          initial={{ scale: 0 }}
+                          animate={{ scale: 1 }}
+                          exit={{ scale: 0 }}
+                        >
+                          <CheckCircle2 className="w-5 h-5 text-success-500" />
+                        </motion.div>
+                      ) : index.toString() === selectedAnswer ? (
+                        <motion.div
+                          initial={{ scale: 0 }}
+                          animate={{ scale: 1 }}
+                          exit={{ scale: 0 }}
+                        >
+                          <XCircle className="w-5 h-5 text-error-500" />
+                        </motion.div>
+                      ) : null}
+                    </AnimatePresence>
+                  )}
+                </div>
+              </button>
+            ))}
+          </div>
+        );
+
+      case 'fill-blank':
+      case 'short-answer':
+        return (
+          <div className="space-y-4">
+            <input
+              type="text"
+              value={userAnswer}
+              onChange={(e) => setUserAnswer(e.target.value)}
+              placeholder="Type your answer here..."
+              className="w-full p-4 border border-neutral-200 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+              disabled={showFeedback}
+            />
+          </div>
+        );
+
+      case 'true-false':
+        return (
+          <div className="space-y-3">
+            {['True', 'False'].map((option) => (
+              <button
+                key={option}
+                onClick={() => setSelectedAnswer(option)}
+                disabled={showFeedback}
+                className={`w-full p-4 rounded-lg border-2 transition-all ${
+                  showFeedback
+                    ? option === currentQuestion.correctAnswer.toString()
+                      ? 'border-success-500 bg-success-50'
+                      : option === selectedAnswer
+                      ? 'border-error-500 bg-error-50'
+                      : 'border-neutral-200 bg-neutral-50'
+                    : selectedAnswer === option
+                    ? 'border-primary-500 bg-primary-50'
+                    : 'border-neutral-200 hover:border-primary-500 hover:bg-primary-50'
+                }`}
+              >
+                {option}
+              </button>
+            ))}
+          </div>
+        );
+
+      default:
+        return null;
     }
   };
 
@@ -197,12 +299,20 @@ const Quiz: React.FC<QuizProps> = ({
           </div>
         </div>
 
-        <button
-          onClick={() => window.location.reload()}
-          className="bg-primary-600 text-white px-6 py-2 rounded-lg hover:bg-primary-700 transition-colors"
-        >
-          Try Again
-        </button>
+        <div className="flex justify-center gap-4">
+          <button
+            onClick={() => window.location.reload()}
+            className="bg-primary-600 text-white px-6 py-2 rounded-lg hover:bg-primary-700 transition-colors"
+          >
+            Try Again
+          </button>
+          <button
+            onClick={() => onComplete(true)}
+            className="bg-neutral-100 text-neutral-700 px-6 py-2 rounded-lg hover:bg-neutral-200 transition-colors"
+          >
+            Close Quiz
+          </button>
+        </div>
       </motion.div>
     );
   }
@@ -218,8 +328,16 @@ const Quiz: React.FC<QuizProps> = ({
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -20 }}
-      className="bg-white rounded-lg shadow-lg p-6 max-w-2xl mx-auto"
+      className="bg-white rounded-lg shadow-lg p-6 max-w-2xl mx-auto relative"
     >
+      {/* Close Button */}
+      <button
+        onClick={() => onComplete(false)}
+        className="absolute top-4 right-4 text-neutral-400 hover:text-neutral-600 transition-colors"
+      >
+        <X className="w-6 h-6" />
+      </button>
+
       {/* Quiz Header */}
       <div className="flex items-start gap-3 mb-6">
         <Brain className="w-6 h-6 text-primary-600 flex-shrink-0 mt-1" />
@@ -228,10 +346,6 @@ const Quiz: React.FC<QuizProps> = ({
             <h3 className="text-xl font-semibold text-neutral-800">
               Question {currentQuestionIndex + 1} of {questions.length}
             </h3>
-            <div className="flex items-center gap-2 text-sm text-neutral-500">
-              <Timer className="w-4 h-4" />
-              <span>{timeLeft}s</span>
-            </div>
           </div>
           <div className="w-full bg-neutral-100 rounded-full h-1.5 mb-4">
             <div 
@@ -245,75 +359,17 @@ const Quiz: React.FC<QuizProps> = ({
 
       {/* Question Content */}
       <div className="space-y-3">
-        {currentQuestion.type === 'coding' && (
+        {currentQuestion.codeSnippet && (
           <div className="mb-4">
             <div className="bg-neutral-800 text-white p-4 rounded-lg mb-4">
               <pre className="font-mono text-sm">
                 <code>{currentQuestion.codeSnippet}</code>
               </pre>
             </div>
-            <textarea
-              value={userCode}
-              onChange={(e) => setUserCode(e.target.value)}
-              className="w-full h-32 p-4 border border-neutral-200 rounded-lg font-mono text-sm"
-              placeholder="Write your code here..."
-              disabled={showFeedback}
-            />
           </div>
         )}
 
-        {currentQuestion.options.map((option, index) => (
-          <button
-            key={index}
-            onClick={() => handleAnswer(index)}
-            disabled={showFeedback}
-            className={`w-full p-4 rounded-lg border-2 transition-all ${
-              showFeedback
-                ? index === currentQuestion.correctAnswer
-                  ? 'border-success-500 bg-success-50'
-                  : index === selectedAnswer
-                  ? 'border-error-500 bg-error-50'
-                  : 'border-neutral-200 bg-neutral-50'
-                : 'border-neutral-200 hover:border-primary-500 hover:bg-primary-50'
-            }`}
-          >
-            <div className="flex items-center justify-between">
-              <span className={`text-left ${
-                showFeedback
-                  ? index === currentQuestion.correctAnswer
-                    ? 'text-success-700'
-                    : index === selectedAnswer
-                    ? 'text-error-700'
-                    : 'text-neutral-500'
-                  : 'text-neutral-700'
-              }`}>
-                {option}
-              </span>
-              
-              {showFeedback && (
-                <AnimatePresence>
-                  {index === currentQuestion.correctAnswer ? (
-                    <motion.div
-                      initial={{ scale: 0 }}
-                      animate={{ scale: 1 }}
-                      exit={{ scale: 0 }}
-                    >
-                      <CheckCircle2 className="w-5 h-5 text-success-500" />
-                    </motion.div>
-                  ) : index === selectedAnswer ? (
-                    <motion.div
-                      initial={{ scale: 0 }}
-                      animate={{ scale: 1 }}
-                      exit={{ scale: 0 }}
-                    >
-                      <XCircle className="w-5 h-5 text-error-500" />
-                    </motion.div>
-                  ) : null}
-                </AnimatePresence>
-              )}
-            </div>
-          </button>
-        ))}
+        {renderQuestionContent()}
       </div>
 
       {/* Feedback */}
@@ -324,16 +380,19 @@ const Quiz: React.FC<QuizProps> = ({
           className="mt-6"
         >
           <div className={`p-4 rounded-lg ${
-            selectedAnswer === currentQuestion.correctAnswer
+            (currentQuestion.type === 'multiple-choice' && selectedAnswer === currentQuestion.correctAnswer.toString()) ||
+            (currentQuestion.type !== 'multiple-choice' && userAnswer.toLowerCase().trim() === currentQuestion.correctAnswer.toString().toLowerCase().trim())
               ? 'bg-success-50 border border-success-200'
               : 'bg-error-50 border border-error-200'
           }`}>
             <p className={`font-medium mb-2 ${
-              selectedAnswer === currentQuestion.correctAnswer
+              (currentQuestion.type === 'multiple-choice' && selectedAnswer === currentQuestion.correctAnswer.toString()) ||
+              (currentQuestion.type !== 'multiple-choice' && userAnswer.toLowerCase().trim() === currentQuestion.correctAnswer.toString().toLowerCase().trim())
                 ? 'text-success-700'
-                :  'text-error-700'
+                : 'text-error-700'
             }`}>
-              {selectedAnswer === currentQuestion.correctAnswer
+              {(currentQuestion.type === 'multiple-choice' && selectedAnswer === currentQuestion.correctAnswer.toString()) ||
+               (currentQuestion.type !== 'multiple-choice' && userAnswer.toLowerCase().trim() === currentQuestion.correctAnswer.toString().toLowerCase().trim())
                 ? "That's correct! 🎉"
                 : "Not quite right"}
             </p>
@@ -356,6 +415,21 @@ const Quiz: React.FC<QuizProps> = ({
             </button>
           </div>
         </motion.div>
+      )}
+
+      {/* Submit Button */}
+      {!showFeedback && (
+        <div className="flex justify-end mt-6">
+          <button
+            onClick={handleAnswer}
+            disabled={!selectedAnswer && !userAnswer}
+            className={`bg-primary-600 text-white px-6 py-2 rounded-lg transition-colors flex items-center gap-2 ${
+              !selectedAnswer && !userAnswer ? 'opacity-50 cursor-not-allowed' : 'hover:bg-primary-700'
+            }`}
+          >
+            Submit Answer
+          </button>
+        </div>
       )}
     </motion.div>
   );

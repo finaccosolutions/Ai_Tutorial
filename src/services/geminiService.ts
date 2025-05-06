@@ -2,10 +2,10 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 
 interface QuizQuestion {
   question: string;
-  options: string[];
-  correctAnswer: number;
+  type: 'multiple-choice' | 'fill-blank' | 'true-false' | 'short-answer';
+  options?: string[];
+  correctAnswer: string | number;
   explanation: string;
-  type: 'multiple-choice' | 'coding';
   codeSnippet?: string;
 }
 
@@ -20,9 +20,8 @@ class GeminiService {
 
     try {
       this.genAI = new GoogleGenerativeAI(apiKey);
-      // Update model configuration to use the correct version
       this.model = this.genAI.getGenerativeModel({ 
-        model: "gemini-pro",
+        model: "gemini-1.5-pro-002",
         generationConfig: {
           temperature: 0.7,
           topK: 40,
@@ -46,33 +45,41 @@ class GeminiService {
     }
 
     const prompt = `
-      Create a quiz about ${topic} for a ${level} level student.
+      Create a comprehensive quiz about ${topic} for a ${level} level student.
       
-      Generate 5 questions with:
-      1. Clear, specific questions
-      2. 4 options per question (one correct)
-      3. Detailed explanations for answers
-      4. Mix of concept and application questions
-      5. For programming topics, include at least one coding question
+      Generate 8 questions with a mix of:
+      - Multiple choice questions
+      - Fill in the blank questions
+      - True/False questions
+      - Short answer questions
+      
+      For each question include:
+      1. Clear, specific question text
+      2. Question type (multiple-choice, fill-blank, true-false, or short-answer)
+      3. For multiple choice: 4 options (one correct)
+      4. Correct answer
+      5. Detailed explanation
+      6. Optional code snippet for programming topics
       
       Format as JSON array:
       [
         {
           "question": "Question text",
-          "options": ["Option A", "Option B", "Option C", "Option D"],
-          "correctAnswer": 0,
-          "explanation": "Detailed explanation",
           "type": "multiple-choice",
-          "codeSnippet": "Optional code for coding questions"
+          "options": ["Option A", "Option B", "Option C", "Option D"],
+          "correctAnswer": "Correct answer or index",
+          "explanation": "Detailed explanation",
+          "codeSnippet": "Optional code for programming questions"
         }
       ]
       
       Ensure:
       - Questions test understanding, not just memorization
       - Clear, unambiguous wording
-      - Plausible but distinct options
+      - Mix of theoretical and practical questions
       - Helpful explanations that teach
       - Difficulty matches ${level} level
+      - For fill-in-blank and short answer, ensure answers are specific and unambiguous
     `;
 
     try {
@@ -95,9 +102,12 @@ class GeminiService {
         }
 
         questions.forEach((q, i) => {
-          if (!q.question || !Array.isArray(q.options) || q.options.length !== 4 || 
-              typeof q.correctAnswer !== 'number' || !q.explanation) {
+          if (!q.question || !q.type || !q.correctAnswer || !q.explanation) {
             throw new Error(`Invalid question format at index ${i}`);
+          }
+          
+          if (q.type === 'multiple-choice' && (!Array.isArray(q.options) || q.options.length !== 4)) {
+            throw new Error(`Invalid options for multiple choice question at index ${i}`);
           }
         });
 

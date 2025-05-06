@@ -31,6 +31,13 @@ const Lesson: React.FC = () => {
   const [isPaused, setIsPaused] = useState(false);
   const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
 
+  // Automatically pause slideshow when quiz is shown
+  useEffect(() => {
+    if (showQuiz) {
+      setIsPaused(true);
+    }
+  }, [showQuiz]);
+
   useEffect(() => {
     const storedTopic = localStorage.getItem('selectedTopic');
     if (storedTopic) {
@@ -101,6 +108,8 @@ const Lesson: React.FC = () => {
 
   const handleQuizComplete = (correct: boolean) => {
     setShowQuiz(false);
+    // Resume slideshow after quiz is completed
+    setIsPaused(false);
   };
 
   const handleSlideChange = (index: number) => {
