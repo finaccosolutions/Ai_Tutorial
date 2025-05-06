@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import { ChevronRight, ChevronLeft, BookOpen, User, Globe, Target, GraduationCap as Graduation } from 'lucide-react';
 import { useUserPreferences, KnowledgeLevel, Language } from '../contexts/UserPreferencesContext';
 import { useAuth } from '../contexts/AuthContext';
+import { supabase } from '../lib/supabase';
 
 interface OnboardingProps {
   isEditing?: boolean;
@@ -25,6 +26,7 @@ const Onboarding: React.FC<OnboardingProps> = ({ isEditing = false, onComplete, 
   
   const [currentStep, setCurrentStep] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   
   // Form state
   const [subject, setSubject] = useState(preferences?.subject || '');
@@ -105,6 +107,7 @@ const Onboarding: React.FC<OnboardingProps> = ({ isEditing = false, onComplete, 
     if (!user) return;
     
     setIsSubmitting(true);
+    setError(null);
     
     try {
       const newPreferences = {
@@ -115,6 +118,17 @@ const Onboarding: React.FC<OnboardingProps> = ({ isEditing = false, onComplete, 
         onboardingCompleted: true
       };
 
+      // Clear presentation cache for the user
+      const { error: clearError } = await supabase
+        .from('presentation_cache')
+        .delete()
+        .eq('user_id', user.id);
+
+      if (clearError) {
+        console.error('Error clearing presentation cache:', clearError);
+        throw new Error('Failed to clear presentation cache');
+      }
+
       if (isEditing && onComplete) {
         await onComplete(newPreferences);
       } else {
@@ -124,6 +138,7 @@ const Onboarding: React.FC<OnboardingProps> = ({ isEditing = false, onComplete, 
       }
     } catch (error) {
       console.error('Error saving preferences:', error);
+      setError(error instanceof Error ? error.message : 'Failed to save preferences');
       setIsSubmitting(false);
     }
   };
@@ -457,6 +472,12 @@ const Onboarding: React.FC<OnboardingProps> = ({ isEditing = false, onComplete, 
           >
             {renderStepContent()}
           </motion.div>
+
+          {error && (
+            <div className="mb-6 p-4 bg-error-50 border border-error-200 rounded-lg">
+              <p className="text-error-700">{error}</p>
+            </div>
+          )}
           
           <div className="flex justify-between mt-8">
             <button
