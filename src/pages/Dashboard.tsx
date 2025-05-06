@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Play, BookOpen, User2, Settings, Clock, Target, Award, RefreshCw, Edit } from 'lucide-react';
+import { Play, BookOpen, User2, Settings, Clock, Target, Award, RefreshCw, Edit, Sparkles, ArrowRight } from 'lucide-react';
 import { useUserPreferences } from '../contexts/UserPreferencesContext';
 import { useAuth } from '../contexts/AuthContext';
 import geminiService, { Topic } from '../services/geminiService';
@@ -17,8 +17,8 @@ const Dashboard: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [showPreferencesModal, setShowPreferencesModal] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [hoveredTopic, setHoveredTopic] = useState<string | null>(null);
 
-  // Load or generate topics when preferences change
   useEffect(() => {
     if (!preferences?.subject || !preferences?.knowledgeLevel || !preferences?.language || !geminiApiKey) {
       setIsLoading(false);
@@ -30,14 +30,12 @@ const Dashboard: React.FC = () => {
       setError(null);
 
       try {
-        // Check if we have stored topics
         if (preferences.topics && preferences.topics.length > 0) {
           setTopics(preferences.topics);
           setIsLoading(false);
           return;
         }
 
-        // Generate new topics
         const newTopics = await geminiService.generateTopicsList(
           preferences.subject,
           preferences.knowledgeLevel,
@@ -45,7 +43,6 @@ const Dashboard: React.FC = () => {
           preferences.learningGoals || []
         );
         
-        // Update preferences with new topics
         await updatePreferences({
           ...preferences,
           topics: newTopics
@@ -69,7 +66,7 @@ const Dashboard: React.FC = () => {
       await updatePreferences({
         ...newPreferences,
         onboardingCompleted: true,
-        topics: [] // Clear topics to force regeneration
+        topics: []
       });
       await savePreferences();
       setShowPreferencesModal(false);
@@ -86,6 +83,19 @@ const Dashboard: React.FC = () => {
     navigate(`/lesson/${topic.id}`);
   };
 
+  const getDifficultyColor = (difficulty: string) => {
+    switch (difficulty.toLowerCase()) {
+      case 'beginner':
+        return 'bg-emerald-100 text-emerald-700';
+      case 'intermediate':
+        return 'bg-amber-100 text-amber-700';
+      case 'advanced':
+        return 'bg-rose-100 text-rose-700';
+      default:
+        return 'bg-neutral-100 text-neutral-700';
+    }
+  };
+
   if (showPreferencesModal) {
     return (
       <Onboarding 
@@ -99,20 +109,28 @@ const Dashboard: React.FC = () => {
   if (isLoading) {
     return (
       <div className="min-h-screen bg-neutral-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="inline-block h-12 w-12 border-4 border-primary-300 border-t-primary-600 rounded-full animate-spin mb-4"></div>
-          <h2 className="text-2xl font-semibold text-neutral-800">Preparing your learning path...</h2>
-          <p className="text-neutral-600 mt-2">Customizing content based on your preferences</p>
-        </div>
+        <motion.div 
+          className="text-center"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+        >
+          <div className="relative">
+            <div className="w-16 h-16 border-4 border-primary-200 border-t-primary-600 rounded-full animate-spin"></div>
+            <Sparkles className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-primary-600 w-8 h-8" />
+          </div>
+          <h2 className="mt-6 text-2xl font-semibold text-neutral-800">Preparing your learning path...</h2>
+          <p className="mt-2 text-neutral-600">Customizing content based on your preferences</p>
+        </motion.div>
       </div>
     );
   }
 
   return (
-    <div className="bg-neutral-50 min-h-screen pb-12">
+    <div className="min-h-screen bg-gradient-to-br from-neutral-50 via-primary-50/10 to-neutral-50">
       {/* Hero Section */}
-      <div className="bg-primary-600 text-white py-12 px-6">
-        <div className="container mx-auto max-w-6xl">
+      <div className="bg-gradient-to-r from-primary-600 to-primary-700 text-white py-12 px-6 relative overflow-hidden">
+        <div className="absolute inset-0 bg-[url('https://images.pexels.com/photos/3183150/pexels-photo-3183150.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2')] opacity-10 bg-cover bg-center"></div>
+        <div className="container mx-auto max-w-6xl relative">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -120,7 +138,7 @@ const Dashboard: React.FC = () => {
           >
             <div className="flex justify-between items-start">
               <div>
-                <h1 className="text-3xl md:text-4xl font-bold mb-3">
+                <h1 className="text-4xl md:text-5xl font-bold mb-3 bg-clip-text text-transparent bg-gradient-to-r from-white to-primary-100">
                   Welcome to Your Learning Journey
                 </h1>
                 <p className="text-primary-100 text-lg max-w-3xl">
@@ -128,48 +146,82 @@ const Dashboard: React.FC = () => {
                 </p>
               </div>
               
-              <button
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
                 onClick={() => setShowPreferencesModal(true)}
-                className="bg-white/10 hover:bg-white/20 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors"
+                className="bg-white/10 hover:bg-white/20 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-all duration-300 backdrop-blur-sm border border-white/20 shadow-lg"
               >
                 <Edit className="h-4 w-4" />
                 Edit Preferences
-              </button>
+              </motion.button>
             </div>
             
-            <div className="mt-6 flex flex-wrap gap-4">
-              <div className="bg-white/10 backdrop-blur-sm rounded-lg px-4 py-3 flex items-center">
-                <BookOpen className="h-5 w-5 mr-2" />
-                <span>Subject: <strong>{preferences?.subject}</strong></span>
-              </div>
+            <div className="mt-8 flex flex-wrap gap-4">
+              <motion.div 
+                whileHover={{ scale: 1.05 }}
+                className="bg-white/10 backdrop-blur-sm rounded-lg px-6 py-4 flex items-center border border-white/20"
+              >
+                <BookOpen className="h-6 w-6 mr-3 text-primary-200" />
+                <div>
+                  <p className="text-primary-200 text-sm">Subject</p>
+                  <p className="font-semibold">{preferences?.subject}</p>
+                </div>
+              </motion.div>
               
-              <div className="bg-white/10 backdrop-blur-sm rounded-lg px-4 py-3 flex items-center">
-                <User2 className="h-5 w-5 mr-2" />
-                <span>Level: <strong>{preferences?.knowledgeLevel}</strong></span>
-              </div>
+              <motion.div 
+                whileHover={{ scale: 1.05 }}
+                className="bg-white/10 backdrop-blur-sm rounded-lg px-6 py-4 flex items-center border border-white/20"
+              >
+                <User2 className="h-6 w-6 mr-3 text-primary-200" />
+                <div>
+                  <p className="text-primary-200 text-sm">Level</p>
+                  <p className="font-semibold">{preferences?.knowledgeLevel}</p>
+                </div>
+              </motion.div>
 
-              <div className="bg-white/10 backdrop-blur-sm rounded-lg px-4 py-3 flex items-center">
-                <Settings className="h-5 w-5 mr-2" />
-                <span>Language: <strong>{preferences?.language}</strong></span>
-              </div>
+              <motion.div 
+                whileHover={{ scale: 1.05 }}
+                className="bg-white/10 backdrop-blur-sm rounded-lg px-6 py-4 flex items-center border border-white/20"
+              >
+                <Settings className="h-6 w-6 mr-3 text-primary-200" />
+                <div>
+                  <p className="text-primary-200 text-sm">Language</p>
+                  <p className="font-semibold">{preferences?.language}</p>
+                </div>
+              </motion.div>
             </div>
           </motion.div>
         </div>
       </div>
       
       {/* Main Content */}
-      <div className="container mx-auto max-w-6xl px-4 md:px-6 pt-8">
+      <div className="container mx-auto max-w-6xl px-4 md:px-6 py-12">
         <div className="grid grid-cols-1 gap-8">
           {/* Topics List */}
           <div>
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-2xl font-semibold text-neutral-800">Your Learning Path</h2>
+            <div className="flex justify-between items-center mb-8">
+              <h2 className="text-3xl font-bold text-neutral-800 bg-gradient-to-r from-primary-600 to-primary-800 bg-clip-text text-transparent">
+                Your Learning Path
+              </h2>
             </div>
             
             {error ? (
-              <div className="bg-error-50 border border-error-200 text-error-700 p-4 rounded-lg mb-6">
-                {error}
-              </div>
+              <motion.div 
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="bg-error-50 border border-error-200 text-error-700 p-6 rounded-xl mb-6 shadow-lg"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 bg-error-100 rounded-full flex items-center justify-center">
+                    <AlertCircle className="w-6 h-6 text-error-600" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold mb-1">Error Loading Topics</h3>
+                    <p>{error}</p>
+                  </div>
+                </div>
+              </motion.div>
             ) : (
               <div className="grid gap-6">
                 {topics.map((topic, index) => (
@@ -178,64 +230,94 @@ const Dashboard: React.FC = () => {
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: index * 0.1 }}
-                    className="bg-white rounded-lg border border-neutral-200 p-6 hover:border-primary-300 transition-all hover:shadow-md"
+                    onHoverStart={() => setHoveredTopic(topic.id)}
+                    onHoverEnd={() => setHoveredTopic(null)}
+                    className={`bg-white rounded-xl border transition-all duration-300 ${
+                      hoveredTopic === topic.id
+                        ? 'border-primary-300 shadow-xl transform scale-[1.02]'
+                        : 'border-neutral-200 shadow-md'
+                    }`}
                   >
-                    <div className="space-y-4">
-                      <div className="flex justify-between items-start">
+                    <div className="p-6 space-y-6">
+                      <div className="flex justify-between items-start gap-6">
                         <div className="flex-grow">
-                          <h3 className="text-xl font-semibold text-neutral-800 mb-2">
+                          <motion.h3 
+                            className="text-2xl font-bold text-neutral-800 mb-3"
+                            animate={{
+                              color: hoveredTopic === topic.id ? '#2563eb' : '#1f2937'
+                            }}
+                          >
                             {topic.title}
-                          </h3>
-                          <p className="text-neutral-600 mb-4">
+                          </motion.h3>
+                          <p className="text-neutral-600 text-lg leading-relaxed">
                             {topic.description}
                           </p>
                         </div>
-                        <button
+                        <motion.button
+                          whileHover={{ scale: 1.05 }}
+                          whileTap={{ scale: 0.95 }}
                           onClick={() => handleStartLesson(topic)}
-                          className="flex items-center gap-2 bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700 transition-colors ml-4"
+                          className="flex items-center gap-2 bg-gradient-to-r from-primary-600 to-primary-700 text-white px-6 py-3 rounded-lg hover:shadow-lg transition-all duration-300"
                         >
-                          <Play className="h-4 w-4" />
-                          Start
-                        </button>
+                          <Play className="h-5 w-5" />
+                          Start Learning
+                        </motion.button>
                       </div>
 
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div className="flex items-center text-neutral-600">
-                          <Clock className="h-4 w-4 mr-2" />
-                          <span>{topic.estimatedDuration} minutes</span>
-                        </div>
-                        <div className="flex items-center text-neutral-600">
-                          <Award className="h-4 w-4 mr-2" />
+                        <motion.div 
+                          whileHover={{ scale: 1.05 }}
+                          className="flex items-center bg-neutral-50 rounded-lg p-3"
+                        >
+                          <Clock className="h-5 w-5 text-primary-600 mr-3" />
+                          <span className="text-neutral-700">{topic.estimatedDuration} minutes</span>
+                        </motion.div>
+                        <motion.div 
+                          whileHover={{ scale: 1.05 }}
+                          className={`flex items-center rounded-lg p-3 ${getDifficultyColor(topic.difficulty)}`}
+                        >
+                          <Award className="h-5 w-5 mr-3" />
                           <span>{topic.difficulty}</span>
-                        </div>
-                        <div className="flex items-center text-neutral-600">
-                          <Target className="h-4 w-4 mr-2" />
-                          <span>{topic.learningObjectives.length} objectives</span>
-                        </div>
+                        </motion.div>
+                        <motion.div 
+                          whileHover={{ scale: 1.05 }}
+                          className="flex items-center bg-neutral-50 rounded-lg p-3"
+                        >
+                          <Target className="h-5 w-5 text-primary-600 mr-3" />
+                          <span className="text-neutral-700">{topic.learningObjectives.length} objectives</span>
+                        </motion.div>
                       </div>
 
                       {topic.learningObjectives.length > 0 && (
-                        <div className="mt-4">
-                          <h4 className="text-sm font-semibold text-neutral-700 mb-2">Learning Objectives:</h4>
-                          <ul className="list-disc list-inside space-y-1">
+                        <div className="space-y-3">
+                          <h4 className="text-lg font-semibold text-neutral-800">Learning Objectives</h4>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                             {topic.learningObjectives.map((objective, i) => (
-                              <li key={i} className="text-sm text-neutral-600">{objective}</li>
+                              <motion.div
+                                key={i}
+                                whileHover={{ scale: 1.02 }}
+                                className="flex items-start gap-2 bg-neutral-50 p-3 rounded-lg"
+                              >
+                                <ArrowRight className="h-5 w-5 text-primary-600 flex-shrink-0 mt-0.5" />
+                                <span className="text-neutral-700">{objective}</span>
+                              </motion.div>
                             ))}
-                          </ul>
+                          </div>
                         </div>
                       )}
 
                       {topic.prerequisites.length > 0 && (
-                        <div className="mt-4">
-                          <h4 className="text-sm font-semibold text-neutral-700 mb-2">Prerequisites:</h4>
+                        <div className="space-y-3">
+                          <h4 className="text-lg font-semibold text-neutral-800">Prerequisites</h4>
                           <div className="flex flex-wrap gap-2">
                             {topic.prerequisites.map((prerequisite, i) => (
-                              <span
+                              <motion.span
                                 key={i}
-                                className="px-2 py-1 bg-neutral-100 text-neutral-700 rounded-full text-sm"
+                                whileHover={{ scale: 1.05 }}
+                                className="px-4 py-2 bg-primary-50 text-primary-700 rounded-full text-sm font-medium border border-primary-100"
                               >
                                 {prerequisite}
-                              </span>
+                              </motion.span>
                             ))}
                           </div>
                         </div>
@@ -252,4 +334,4 @@ const Dashboard: React.FC = () => {
   );
 };
 
-export default Dashboard
+export default Dashboard;
