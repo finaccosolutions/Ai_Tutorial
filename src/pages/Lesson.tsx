@@ -293,29 +293,6 @@ const Lesson: React.FC = () => {
         )}
       </AnimatePresence>
 
-      {/* Quiz Modal */}
-      <AnimatePresence>
-        {showQuiz && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
-          >
-            <Quiz
-              question="What was the main concept covered in this section?"
-              options={[
-                "Option 1",
-                "Option 2",
-                "Option 3",
-                "Option 4"
-              ]}
-              correctAnswer={0}
-              onComplete={handleQuizComplete}
-            />
-          </motion.div>
-        )}
-      </AnimatePresence>
     </div>
   );
 };
