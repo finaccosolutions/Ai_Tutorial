@@ -8,12 +8,6 @@ export interface Topic {
   difficulty: string;
   learningObjectives: string[];
   prerequisites: string[];
-  subtopics: {
-    title: string;
-    description: string;
-    duration: number;
-    objectives: string[];
-  }[];
 }
 
 interface QuizQuestion {
@@ -91,55 +85,54 @@ class GeminiService {
     }
 
     const prompt = `
-      Create a comprehensive learning curriculum for ${subject} tailored for ${knowledgeLevel} level students in ${language}.
+      Create a structured learning path for ${subject} tailored for ${knowledgeLevel} level students in ${language}.
       Consider these learning goals: ${learningGoals.join(', ')}.
 
-      Generate required main topics that cover the entire subject thoroughly. Each main topic should:
-      1. Represent a major area or concept in ${subject}
-      2. Include required number of subtopics that break down the main concept
-      3. Build progressively in complexity
-      4. Connect to real-world applications
+      Generate 4-5 comprehensive topics that build upon each other.
       
-      For each main topic include:
-      1. Clear, descriptive title
-      2. Detailed description
-      3. Estimated duration (30-45 minutes for entire topic)
-      4. Appropriate difficulty level
-      5. Appropriate number of specific learning objectives
-      6. Required prerequisites
-      7. subtopics, each with:
-         - Title
-         - Description
-         - Duration
-
+      For each topic include:
+      1. Clear, descriptive title that accurately reflects the content
+      2. Detailed description (2-3 sentences) explaining what will be covered
+      3. Realistic estimated duration (5-15 minutes per topic)
+      4. Appropriate difficulty level (Beginner, Intermediate, Advanced)
+      5. 4-6 specific, measurable learning objectives
+      6. Relevant prerequisites that directly relate to the topic
+      
       Format as a JSON array with these exact keys:
-      {
-        "id": "uuid format",
-        "title": "Main topic title",
-        "description": "Detailed description",
-        "estimatedDuration": number (in minutes),
-        "difficulty": "Beginner/Intermediate/Advanced",
-        "learningObjectives": ["objective1", "objective2", ...],
-        "prerequisites": ["prerequisite1", "prerequisite2", ...],
-        "subtopics": [
-          {
-            "title": "Subtopic title",
-            "description": "Subtopic description",
-            "duration": number (in minutes),
-            "objectives": ["objective1", "objective2", ...]
-          }
-        ]
-      }
+      - id (uuid format)
+      - title (string)
+      - description (string)
+      - estimatedDuration (number, in minutes, realistic 5-15 minute range)
+      - difficulty (string)
+      - learningObjectives (string array)
+      - prerequisites (string array)
+      
+      Example format:
+      [
+        {
+          "id": "12345678-1234-5678-1234-567812345678",
+          "title": "Introduction to Variables",
+          "description": "Learn the fundamentals of...",
+          "estimatedDuration": 10,
+          "difficulty": "Beginner",
+          "learningObjectives": [
+            "Define and explain what variables are",
+            "Understand different variable types",
+            "Learn proper variable naming conventions",
+            "Practice declaring and initializing variables"
+          ],
+          "prerequisites": ["Basic computer skills", "Understanding of basic math concepts"]
+        }
+      ]
 
       Ensure:
-      - Topics progress logically
+      - Topics progress logically from basic to advanced concepts
       - Content matches ${knowledgeLevel} level
       - Prerequisites are specific and relevant
-      - Duration estimates are realistic
+      - Duration estimates are realistic (5-15 minutes per topic)
       - Learning objectives are specific and measurable
       - All text is in ${language}
-      - Topics cover the full breadth of ${subject}
-      - Subtopics break down complex concepts into manageable chunks
+      - Each topic builds on the previous ones
     `;
 
     try {
@@ -164,26 +157,14 @@ class GeminiService {
             if (!topic.id || !topic.title || !topic.description || 
                 !topic.estimatedDuration || !topic.difficulty || 
                 !Array.isArray(topic.learningObjectives) || 
-                !Array.isArray(topic.prerequisites) ||
-                !Array.isArray(topic.subtopics)) {
+                !Array.isArray(topic.prerequisites)) {
               throw new Error(`Invalid topic format at index ${i}`);
             }
 
-            // Validate duration ranges
-            if (topic.estimatedDuration < 30 || topic.estimatedDuration > 45) {
-              topic.estimatedDuration = Math.min(Math.max(topic.estimatedDuration, 30), 45);
+            // Ensure duration is within realistic range
+            if (topic.estimatedDuration < 5 || topic.estimatedDuration > 15) {
+              topic.estimatedDuration = Math.min(Math.max(topic.estimatedDuration, 5), 15);
             }
-
-            topic.subtopics.forEach((subtopic, j) => {
-              if (!subtopic.title || !subtopic.description || 
-                  !subtopic.duration || !Array.isArray(subtopic.objectives)) {
-                throw new Error(`Invalid subtopic format at topic ${i}, subtopic ${j}`);
-              }
-
-              if (subtopic.duration < 8 || subtopic.duration > 12) {
-                subtopic.duration = Math.min(Math.max(subtopic.duration, 8), 12);
-              }
-            });
           });
 
           return topics;
