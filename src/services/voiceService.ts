@@ -11,14 +11,12 @@ export const speak = (
 ): SpeechSynthesisUtterance | null => {
   if (!window.speechSynthesis) {
     console.error('Speech synthesis not supported in this browser');
+    if (onEnd) onEnd();
     return null;
   }
 
   // Stop any existing speech before starting new one
-  if (currentUtterance) {
-    window.speechSynthesis.cancel();
-    currentUtterance = null;
-  }
+  stopSpeaking();
 
   retryCount = 0;
   const utterance = new SpeechSynthesisUtterance(text);
@@ -39,7 +37,7 @@ export const speak = (
     
     if (preferredVoices.length > 0) {
       utterance.voice = preferredVoices[0];
-    } else {
+    } else if (voices.length > 0) {
       utterance.voice = voices[0];
     }
     
@@ -58,46 +56,35 @@ export const speak = (
     utterance.onerror = (event) => {
       console.error('Speech synthesis error:', event);
       
+      // If this utterance is no longer current, ignore the error
       if (currentUtterance !== utterance) {
         return;
       }
 
-      // Only retry for non-intentional interruptions
-      if (event.error === 'interrupted') {
-        if (retryCount === 0) {
-          retryCount++;
-          setTimeout(() => {
-            if (currentUtterance === utterance) {
-              window.speechSynthesis.speak(utterance);
-            }
-          }, RETRY_DELAY);
-        } else {
-          currentUtterance = null;
-          if (onEnd) onEnd();
-        }
+      // Always clean up the current utterance
+      currentUtterance = null;
+
+      // Handle interrupted speech or other errors
+      if (event.error === 'interrupted' || retryCount >= MAX_RETRIES) {
+        retryCount = 0;
+        if (onEnd) onEnd();
         return;
       }
 
-      if (retryCount < MAX_RETRIES) {
-        retryCount++;
-        console.log(`Retrying speech synthesis (attempt ${retryCount}/${MAX_RETRIES})`);
-        
-        setTimeout(() => {
-          try {
-            if (!window.speechSynthesis.speaking && currentUtterance === utterance) {
-              window.speechSynthesis.resume();
-              window.speechSynthesis.speak(utterance);
-            }
-          } catch (error) {
-            console.error('Failed to retry speech:', error);
-          }
-        }, RETRY_DELAY * retryCount);
-      } else {
-        console.error('Max retries reached for speech synthesis');
-        currentUtterance = null;
-        retryCount = 0;
-        if (onEnd) onEnd();
-      }
+      // For other errors, attempt retries
+      retryCount++;
+      console.log(`Retrying speech synthesis (attempt ${retryCount}/${MAX_RETRIES})`);
+      
+      setTimeout(() => {
+        try {
+          window.speechSynthesis.cancel(); // Clear any pending speech
+          window.speechSynthesis.speak(utterance);
+        } catch (error) {
+          console.error('Failed to retry speech:', error);
+          currentUtterance = null;
+          if (onEnd) onEnd();
+        }
+      }, RETRY_DELAY * retryCount);
     };
 
     if (onBoundary) {
@@ -105,10 +92,8 @@ export const speak = (
     }
     
     try {
-      if (!window.speechSynthesis.speaking) {
-        window.speechSynthesis.resume();
-        window.speechSynthesis.speak(utterance);
-      }
+      window.speechSynthesis.cancel(); // Clear any pending speech
+      window.speechSynthesis.speak(utterance);
     } catch (error) {
       console.error('Failed to start speech:', error);
       currentUtterance = null;
@@ -116,6 +101,7 @@ export const speak = (
     }
   };
 
+  // Handle voice loading
   const voices = window.speechSynthesis.getVoices();
   if (voices.length > 0) {
     loadVoices();
@@ -127,12 +113,13 @@ export const speak = (
 };
 
 export const stopSpeaking = (): void => {
-  if (window.speechSynthesis && currentUtterance) {
+  if (window.speechSynthesis) {
     try {
       window.speechSynthesis.cancel();
-      window.speechSynthesis.resume();
-      currentUtterance = null;
-      retryCount = 0;
+      if (currentUtterance) {
+        currentUtterance = null;
+        retryCount = 0;
+      }
     } catch (error) {
       console.error('Error stopping speech:', error);
     }

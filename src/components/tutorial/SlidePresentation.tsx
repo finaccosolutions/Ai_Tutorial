@@ -39,6 +39,7 @@ const SlidePresentation: React.FC<SlidePresentationProps> = ({
   const wordsRef = useRef<string[]>([]);
   const slideDurationRef = useRef<number>(0);
   const slideStartTimeRef = useRef<number>(0);
+  const highlightTimeoutRef = useRef<NodeJS.Timeout>();
 
   useEffect(() => {
     const handleFullscreenChange = () => {
@@ -97,11 +98,20 @@ const SlidePresentation: React.FC<SlidePresentationProps> = ({
           }
         },
         1,
-        () => {
-          const elapsed = (performance.now() - slideStartTimeRef.current) / 1000;
-          const wordIndex = Math.floor((elapsed / slideDurationRef.current) * wordsRef.current.length);
-          setCurrentWordIndex(Math.min(wordIndex, wordsRef.current.length - 1));
-          setHighlightedText(wordsRef.current.slice(0, wordIndex + 1).join(' '));
+        (event) => {
+          if (event.charIndex !== undefined) {
+            // Clear any existing timeout
+            if (highlightTimeoutRef.current) {
+              clearTimeout(highlightTimeoutRef.current);
+            }
+
+            // Set a new timeout to update the highlighted text
+            highlightTimeoutRef.current = setTimeout(() => {
+              const text = event.target?.text || '';
+              const upToChar = text.slice(0, event.charIndex + event.length);
+              setHighlightedText(upToChar);
+            }, 16); // ~60fps
+          }
         }
       );
     }
@@ -112,6 +122,9 @@ const SlidePresentation: React.FC<SlidePresentationProps> = ({
   const stopPresentation = () => {
     if (animationFrameRef.current) {
       cancelAnimationFrame(animationFrameRef.current);
+    }
+    if (highlightTimeoutRef.current) {
+      clearTimeout(highlightTimeoutRef.current);
     }
     pausedTimeRef.current = performance.now() - startTimeRef.current;
     if (speechRef.current) {
@@ -299,14 +312,12 @@ const SlidePresentation: React.FC<SlidePresentationProps> = ({
                       transition={{ delay: 0.3 + i * 0.1 }}
                     >
                       {!isPaused ? (
-                        <>
-                          <span className="text-pink-300 font-medium">
+                        <span className="text-white/90">
+                          <span className="text-pink-300 font-medium transition-all duration-200">
                             {highlightedText}
                           </span>
-                          <span className="text-white/80">
-                            {paragraph.slice(highlightedText.length)}
-                          </span>
-                        </>
+                          {paragraph.slice(highlightedText.length)}
+                        </span>
                       ) : (
                         <span className="text-white/90">{paragraph}</span>
                       )}
