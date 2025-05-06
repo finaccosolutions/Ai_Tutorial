@@ -4,7 +4,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Play, BookOpen, User2, Settings, Clock, Target, Award, RefreshCw, Edit } from 'lucide-react';
 import { useUserPreferences } from '../contexts/UserPreferencesContext';
 import { useAuth } from '../contexts/AuthContext';
-import { supabase } from '../lib/supabase';
 import geminiService, { Topic } from '../services/geminiService';
 import Onboarding from './Onboarding';
 
@@ -19,7 +18,7 @@ const Dashboard: React.FC = () => {
   const [showPreferencesModal, setShowPreferencesModal] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
-  // Load topics from localStorage or database, fallback to Gemini
+  // Load or generate topics when preferences change
   useEffect(() => {
     if (!preferences?.subject || !preferences?.knowledgeLevel || !preferences?.language || !geminiApiKey) {
       setIsLoading(false);
@@ -31,30 +30,14 @@ const Dashboard: React.FC = () => {
       setError(null);
 
       try {
-        // Try loading from localStorage first
-        const storedTopics = localStorage.getItem(`topics_${preferences.subject}`);
-        if (storedTopics) {
-          setTopics(JSON.parse(storedTopics));
+        // Check if we have stored topics
+        if (preferences.topics && preferences.topics.length > 0) {
+          setTopics(preferences.topics);
           setIsLoading(false);
           return;
         }
 
-        // Try loading from database
-        const { data: existingTopics, error: dbError } = await supabase
-          .from('user_topics')
-          .select('topics')
-          .eq('user_id', user?.id)
-          .eq('subject', preferences.subject)
-          .maybeSingle();
-
-        if (!dbError && existingTopics?.topics) {
-          setTopics(existingTopics.topics);
-          localStorage.setItem(`topics_${preferences.subject}`, JSON.stringify(existingTopics.topics));
-          setIsLoading(false);
-          return;
-        }
-
-        // If no stored topics, generate new ones
+        // Generate new topics
         const newTopics = await geminiService.generateTopicsList(
           preferences.subject,
           preferences.knowledgeLevel,
@@ -62,41 +45,13 @@ const Dashboard: React.FC = () => {
           preferences.learningGoals || []
         );
         
-        setTopics(newTopics);
+        // Update preferences with new topics
+        await updatePreferences({
+          ...preferences,
+          topics: newTopics
+        });
         
-        // Store in localStorage
-        localStorage.setItem(`topics_${preferences.subject}`, JSON.stringify(newTopics));
-
-        // Check if a record exists for this user and subject
-        const { data: existingRecord } = await supabase
-          .from('user_topics')
-          .select('id')
-          .eq('user_id', user?.id)
-          .eq('subject', preferences.subject)
-          .maybeSingle();
-
-        if (existingRecord) {
-          // Update existing record
-          await supabase
-            .from('user_topics')
-            .update({
-              topics: newTopics,
-              last_updated: new Date().toISOString()
-            })
-            .eq('user_id', user?.id)
-            .eq('subject', preferences.subject);
-        } else {
-          // Insert new record
-          await supabase
-            .from('user_topics')
-            .insert({
-              user_id: user?.id,
-              subject: preferences.subject,
-              topics: newTopics,
-              last_updated: new Date().toISOString()
-            });
-        }
-
+        setTopics(newTopics);
       } catch (error: any) {
         console.error('Error loading topics:', error);
         setError(error.message || 'Failed to load topics. Please try again.');
@@ -108,44 +63,27 @@ const Dashboard: React.FC = () => {
     loadTopics();
   }, [preferences?.subject, preferences?.knowledgeLevel, preferences?.language, geminiApiKey]);
 
-  // Restore page state when returning to dashboard
-  useEffect(() => {
-    const savedScrollPosition = localStorage.getItem('dashboardScrollPosition');
-    if (savedScrollPosition) {
-      window.scrollTo(0, parseInt(savedScrollPosition));
-    }
-
-    // Save scroll position when leaving
-    const handleBeforeUnload = () => {
-      localStorage.setItem('dashboardScrollPosition', window.scrollY.toString());
-    };
-
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, []);
-
-  const handleStartLesson = (topic: Topic) => {
-    localStorage.setItem('selectedTopic', JSON.stringify(topic));
-    navigate(`/lesson/${topic.id}`);
-  };
-
   const handlePreferencesSave = async (newPreferences: any) => {
     setIsSaving(true);
     try {
       await updatePreferences({
         ...newPreferences,
-        onboardingCompleted: true
+        onboardingCompleted: true,
+        topics: [] // Clear topics to force regeneration
       });
       await savePreferences();
       setShowPreferencesModal(false);
-      // Reload topics with new preferences
-      setIsLoading(true);
     } catch (error) {
       console.error('Error saving preferences:', error);
       setError('Failed to save preferences. Please try again.');
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const handleStartLesson = (topic: Topic) => {
+    localStorage.setItem('selectedTopic', JSON.stringify(topic));
+    navigate(`/lesson/${topic.id}`);
   };
 
   if (showPreferencesModal) {
@@ -314,4 +252,4 @@ const Dashboard: React.FC = () => {
   );
 };
 
-export default Dashboard;
+export default Dashboard

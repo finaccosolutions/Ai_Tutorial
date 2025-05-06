@@ -12,6 +12,7 @@ export interface UserPreferences {
   language: Language;
   learningGoals: string[];
   onboardingCompleted: boolean;
+  topics?: any[];
 }
 
 interface UserPreferencesContextType {
@@ -26,7 +27,8 @@ const defaultPreferences: UserPreferences = {
   knowledgeLevel: 'beginner',
   language: 'English',
   learningGoals: [],
-  onboardingCompleted: false
+  onboardingCompleted: false,
+  topics: []
 };
 
 // Create context
@@ -67,18 +69,10 @@ export const UserPreferencesProvider: React.FC<{ children: React.ReactNode }> = 
           knowledgeLevel: data.knowledge_level || 'beginner',
           language: data.language || 'English',
           learningGoals: data.learning_goals || [],
-          onboardingCompleted: data.onboarding_completed || false
+          onboardingCompleted: data.onboarding_completed || false,
+          topics: data.topics || []
         };
         setPreferences(loadedPrefs);
-        
-        // Store in localStorage for persistence
-        localStorage.setItem('userPreferences', JSON.stringify(loadedPrefs));
-      } else {
-        // Try loading from localStorage if no DB data
-        const storedPrefs = localStorage.getItem('userPreferences');
-        if (storedPrefs) {
-          setPreferences(JSON.parse(storedPrefs));
-        }
       }
     } catch (error) {
       console.error('Error loading preferences:', error);
@@ -97,7 +91,6 @@ export const UserPreferencesProvider: React.FC<{ children: React.ReactNode }> = 
       };
 
       setPreferences(updatedPreferences as UserPreferences);
-      localStorage.setItem('userPreferences', JSON.stringify(updatedPreferences));
 
       const prefsData = {
         user_id: user.id,
@@ -105,7 +98,8 @@ export const UserPreferencesProvider: React.FC<{ children: React.ReactNode }> = 
         knowledge_level: updatedPreferences.knowledgeLevel,
         language: updatedPreferences.language,
         learning_goals: updatedPreferences.learningGoals,
-        onboarding_completed: updatedPreferences.onboardingCompleted
+        onboarding_completed: updatedPreferences.onboardingCompleted,
+        topics: updatedPreferences.topics || []
       };
 
       // Check if preferences exist
@@ -153,7 +147,8 @@ export const UserPreferencesProvider: React.FC<{ children: React.ReactNode }> = 
         knowledge_level: preferences.knowledgeLevel,
         language: preferences.language,
         learning_goals: preferences.learningGoals,
-        onboarding_completed: preferences.onboardingCompleted
+        onboarding_completed: preferences.onboardingCompleted,
+        topics: preferences.topics || []
       };
 
       const { error } = await supabase
@@ -164,9 +159,6 @@ export const UserPreferencesProvider: React.FC<{ children: React.ReactNode }> = 
         });
 
       if (error) throw error;
-
-      // Store in localStorage
-      localStorage.setItem('userPreferences', JSON.stringify(preferences));
 
       // Reload preferences to ensure we have the latest data
       await loadPreferences();
