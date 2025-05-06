@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Play, Pause, Volume2, VolumeX, Maximize2, ChevronLeft, ChevronRight, Clock, SkipBack, SkipForward } from 'lucide-react';
+import { Play, Pause, Volume2, VolumeX, Maximize2, ChevronLeft, ChevronRight, Clock, SkipBack, SkipForward, Presentation } from 'lucide-react';
 import type { SlidePresentation } from '../../services/slideService';
 import { speak, stopSpeaking } from '../../services/voiceService';
 
@@ -98,7 +98,6 @@ const SlidePresentation: React.FC<SlidePresentationProps> = ({
         },
         1,
         () => {
-          // Word boundary callback for better sync
           const elapsed = (performance.now() - slideStartTimeRef.current) / 1000;
           const wordIndex = Math.floor((elapsed / slideDurationRef.current) * wordsRef.current.length);
           setCurrentWordIndex(Math.min(wordIndex, wordsRef.current.length - 1));
@@ -121,6 +120,8 @@ const SlidePresentation: React.FC<SlidePresentationProps> = ({
   };
 
   const animate = () => {
+    if (isPaused) return;
+
     const now = performance.now();
     const elapsed = (now - startTimeRef.current) / 1000;
     
@@ -135,7 +136,6 @@ const SlidePresentation: React.FC<SlidePresentationProps> = ({
     const currentSlide = presentation.slides[currentSlideIndex];
     const slideElapsed = elapsed - (totalDuration - currentSlide.duration);
     
-    // Calculate word highlighting based on time
     const wordsPerSecond = wordsRef.current.length / currentSlide.duration;
     const wordIndex = Math.min(
       Math.floor(slideElapsed * wordsPerSecond),
@@ -343,7 +343,10 @@ const SlidePresentation: React.FC<SlidePresentationProps> = ({
       <div className="bg-black/40 backdrop-blur-sm border-t border-white/10 p-4">
         {/* Slide Progress */}
         <div className="flex items-center space-x-2 mb-3">
-          <span className="text-xs text-white/60">Slide {currentSlideIndex + 1}/{presentation.slides.length}</span>
+          <div className="flex items-center gap-2">
+            <Presentation className="w-4 h-4 text-white/60" />
+            <span className="text-xs text-white/60">Slide {currentSlideIndex + 1}/{presentation.slides.length}</span>
+          </div>
           <div className="flex-grow h-1.5 bg-white/10 rounded-full overflow-hidden">
             <motion.div
               className="h-full bg-gradient-to-r from-pink-400 to-purple-400 rounded-full"
@@ -359,7 +362,7 @@ const SlidePresentation: React.FC<SlidePresentationProps> = ({
           <Clock className="w-4 h-4 text-white/60" />
           <div 
             ref={timelineRef}
-            className="flex-grow h-2 bg-white/20 rounded-full overflow-hidden cursor-pointer relative group"
+            className="flex-grow h-1.5 bg-white/10 rounded-full overflow-hidden cursor-pointer relative group"
             onClick={handleTimelineClick}
           >
             <motion.div

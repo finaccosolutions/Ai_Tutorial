@@ -54,7 +54,15 @@ export const speak = (
     utterance.onerror = (event) => {
       console.error('Speech synthesis error:', event);
       
+      // Only proceed with retry logic if this utterance is still the current one
       if (currentUtterance !== utterance) {
+        return;
+      }
+
+      // Don't retry for intentional interruptions
+      if (event.error === 'interrupted' && retryCount === 0) {
+        currentUtterance = null;
+        if (onEnd) onEnd();
         return;
       }
 
@@ -67,7 +75,13 @@ export const speak = (
             if (!window.speechSynthesis.speaking && currentUtterance === utterance) {
               window.speechSynthesis.cancel();
               window.speechSynthesis.resume();
-              window.speechSynthesis.speak(utterance);
+              
+              // Add a small delay before speaking again
+              setTimeout(() => {
+                if (currentUtterance === utterance) {
+                  window.speechSynthesis.speak(utterance);
+                }
+              }, 100);
             }
           } catch (error) {
             console.error('Failed to retry speech:', error);
@@ -89,7 +103,13 @@ export const speak = (
       if (!window.speechSynthesis.speaking) {
         window.speechSynthesis.cancel();
         window.speechSynthesis.resume();
-        window.speechSynthesis.speak(utterance);
+        
+        // Add a small delay before speaking
+        setTimeout(() => {
+          if (currentUtterance === utterance) {
+            window.speechSynthesis.speak(utterance);
+          }
+        }, 100);
       }
     } catch (error) {
       console.error('Failed to start speech:', error);

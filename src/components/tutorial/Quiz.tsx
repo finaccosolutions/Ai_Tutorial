@@ -1,28 +1,183 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { CheckCircle2, XCircle, AlertCircle } from 'lucide-react';
+import { CheckCircle2, XCircle, AlertCircle, Award, Brain, Timer, ArrowRight } from 'lucide-react';
+import geminiService from '../../services/geminiService';
 
 interface QuizProps {
-  question: string;
-  options: string[];
-  correctAnswer: number;
+  topic: string;
+  knowledgeLevel: string;
   onComplete: (correct: boolean) => void;
 }
 
+interface QuizQuestion {
+  question: string;
+  options: string[];
+  correctAnswer: number;
+  explanation: string;
+  type: 'multiple-choice' | 'coding';
+  codeSnippet?: string;
+}
+
 const Quiz: React.FC<QuizProps> = ({
-  question,
-  options,
-  correctAnswer,
+  topic,
+  knowledgeLevel,
   onComplete
 }) => {
+  const [questions, setQuestions] = useState<QuizQuestion[]>([]);
+  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
   const [showFeedback, setShowFeedback] = useState(false);
+  const [score, setScore] = useState(0);
+  const [isLoading, setIsLoading] = useState(true);
+  const [userCode, setUserCode] = useState('');
+  const [timeLeft, setTimeLeft] = useState(30);
+  const [quizCompleted, setQuizCompleted] = useState(false);
+
+  useEffect(() => {
+    loadQuizQuestions();
+  }, [topic, knowledgeLevel]);
+
+  useEffect(() => {
+    if (!showFeedback && !quizCompleted) {
+      const timer = setInterval(() => {
+        setTimeLeft((prev) => {
+          if (prev <= 1) {
+            clearInterval(timer);
+            handleAnswer(-1); // Auto-submit on timeout
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+
+      return () => clearInterval(timer);
+    }
+  }, [showFeedback, currentQuestionIndex, quizCompleted]);
+
+  const loadQuizQuestions = async () => {
+    setIsLoading(true);
+    try {
+      const response = await geminiService.generateQuizQuestions(topic, knowledgeLevel);
+      setQuestions(response);
+      setTimeLeft(30);
+    } catch (error) {
+      console.error('Error loading quiz questions:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const handleAnswer = (index: number) => {
+    const currentQuestion = questions[currentQuestionIndex];
+    const isCorrect = index === currentQuestion.correctAnswer;
+    
+    if (isCorrect) {
+      setScore(score + 1);
+    }
+    
     setSelectedAnswer(index);
     setShowFeedback(true);
-    onComplete(index === correctAnswer);
   };
+
+  const handleNext = () => {
+    if (currentQuestionIndex < questions.length - 1) {
+      setCurrentQuestionIndex(currentQuestionIndex + 1);
+      setSelectedAnswer(null);
+      setShowFeedback(false);
+      setTimeLeft(30);
+      setUserCode('');
+    } else {
+      setQuizCompleted(true);
+      onComplete(score === questions.length);
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center p-8">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mb-4"></div>
+          <p className="text-neutral-600">Preparing your quiz...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (quizCompleted) {
+    const percentage = (score / questions.length) * 100;
+    return (
+      <motion.div
+        initial={{ opacity: 0, scale: 0.9 }}
+        animate={{ opacity: 1, scale: 1 }}
+        className="p-8 text-center"
+      >
+        <div className="mb-6">
+          <Award className="w-16 h-16 text-primary-600 mx-auto mb-4" />
+          <h2 className="text-2xl font-bold text-neutral-800 mb-2">Quiz Completed!</h2>
+          <p className="text-neutral-600">
+            You scored {score} out of {questions.length} ({Math.round(percentage)}%)
+          </p>
+        </div>
+
+        <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
+          <div className="flex items-center justify-center mb-4">
+            <div className="relative">
+              <svg className="w-24 h-24">
+                <circle
+                  className="text-gray-200"
+                  strokeWidth="8"
+                  stroke="currentColor"
+                  fill="transparent"
+                  r="44"
+                  cx="48"
+                  cy="48"
+                />
+                <circle
+                  className="text-primary-600"
+                  strokeWidth="8"
+                  strokeLinecap="round"
+                  stroke="currentColor"
+                  fill="transparent"
+                  r="44"
+                  cx="48"
+                  cy="48"
+                  style={{
+                    strokeDasharray: `${2 * Math.PI * 44}`,
+                    strokeDashoffset: `${2 * Math.PI * 44 * (1 - percentage / 100)}`,
+                    transform: "rotate(-90deg)",
+                    transformOrigin: "48px 48px"
+                  }}
+                />
+              </svg>
+              <span className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-2xl font-bold text-primary-600">
+                {Math.round(percentage)}%
+              </span>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <p className="text-neutral-700">
+              {percentage >= 80 ? '🎉 Excellent work!' : 
+               percentage >= 60 ? '👍 Good job!' : 
+               'Keep practicing!'}
+            </p>
+            <p className="text-sm text-neutral-500">
+              Review the questions and explanations to reinforce your learning.
+            </p>
+          </div>
+        </div>
+
+        <button
+          onClick={() => window.location.reload()}
+          className="bg-primary-600 text-white px-6 py-2 rounded-lg hover:bg-primary-700 transition-colors"
+        >
+          Try Again
+        </button>
+      </motion.div>
+    );
+  }
+
+  const currentQuestion = questions[currentQuestionIndex];
 
   return (
     <motion.div
@@ -31,23 +186,56 @@ const Quiz: React.FC<QuizProps> = ({
       exit={{ opacity: 0, y: -20 }}
       className="bg-white rounded-lg shadow-lg p-6 max-w-2xl mx-auto"
     >
+      {/* Quiz Header */}
       <div className="flex items-start gap-3 mb-6">
-        <AlertCircle className="w-6 h-6 text-primary-600 flex-shrink-0 mt-1" />
+        <Brain className="w-6 h-6 text-primary-600 flex-shrink-0 mt-1" />
         <div>
-          <h3 className="text-xl font-semibold text-neutral-800 mb-2">Quick Check</h3>
-          <p className="text-neutral-600">{question}</p>
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-xl font-semibold text-neutral-800">
+              Question {currentQuestionIndex + 1} of {questions.length}
+            </h3>
+            <div className="flex items-center gap-2 text-sm text-neutral-500">
+              <Timer className="w-4 h-4" />
+              <span>{timeLeft}s</span>
+            </div>
+          </div>
+          <div className="w-full bg-neutral-100 rounded-full h-1.5 mb-4">
+            <div 
+              className="bg-primary-600 h-1.5 rounded-full transition-all duration-300"
+              style={{ width: `${((currentQuestionIndex + 1) / questions.length) * 100}%` }}
+            ></div>
+          </div>
+          <p className="text-neutral-600">{currentQuestion.question}</p>
         </div>
       </div>
 
+      {/* Question Content */}
       <div className="space-y-3">
-        {options.map((option, index) => (
+        {currentQuestion.type === 'coding' && (
+          <div className="mb-4">
+            <div className="bg-neutral-800 text-white p-4 rounded-lg mb-4">
+              <pre className="font-mono text-sm">
+                <code>{currentQuestion.codeSnippet}</code>
+              </pre>
+            </div>
+            <textarea
+              value={userCode}
+              onChange={(e) => setUserCode(e.target.value)}
+              className="w-full h-32 p-4 border border-neutral-200 rounded-lg font-mono text-sm"
+              placeholder="Write your code here..."
+              disabled={showFeedback}
+            />
+          </div>
+        )}
+
+        {currentQuestion.options.map((option, index) => (
           <button
             key={index}
             onClick={() => handleAnswer(index)}
             disabled={showFeedback}
             className={`w-full p-4 rounded-lg border-2 transition-all ${
               showFeedback
-                ? index === correctAnswer
+                ? index === currentQuestion.correctAnswer
                   ? 'border-success-500 bg-success-50'
                   : index === selectedAnswer
                   ? 'border-error-500 bg-error-50'
@@ -58,7 +246,7 @@ const Quiz: React.FC<QuizProps> = ({
             <div className="flex items-center justify-between">
               <span className={`text-left ${
                 showFeedback
-                  ? index === correctAnswer
+                  ? index === currentQuestion.correctAnswer
                     ? 'text-success-700'
                     : index === selectedAnswer
                     ? 'text-error-700'
@@ -70,7 +258,7 @@ const Quiz: React.FC<QuizProps> = ({
               
               {showFeedback && (
                 <AnimatePresence>
-                  {index === correctAnswer ? (
+                  {index === currentQuestion.correctAnswer ? (
                     <motion.div
                       initial={{ scale: 0 }}
                       animate={{ scale: 1 }}
@@ -94,17 +282,45 @@ const Quiz: React.FC<QuizProps> = ({
         ))}
       </div>
 
+      {/* Feedback */}
       {showFeedback && (
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
-          className="mt-6 p-4 rounded-lg bg-neutral-50 border border-neutral-200"
+          className="mt-6"
         >
-          <p className="text-neutral-700">
-            {selectedAnswer === correctAnswer
-              ? "That's correct! Well done!"
-              : `The correct answer was: ${options[correctAnswer]}`}
-          </p>
+          <div className={`p-4 rounded-lg ${
+            selectedAnswer === currentQuestion.correctAnswer
+              ? 'bg-success-50 border border-success-200'
+              : 'bg-error-50 border border-error-200'
+          }`}>
+            <p className={`font-medium mb-2 ${
+              selectedAnswer === currentQuestion.correctAnswer
+                ? 'text-success-700'
+                :  'text-error-700'
+            }`}>
+              {selectedAnswer === currentQuestion.correctAnswer
+                ? "That's correct! 🎉"
+                : "Not quite right"}
+            </p>
+            <p className="text-neutral-700">{currentQuestion.explanation}</p>
+          </div>
+
+          <div className="flex justify-end mt-4">
+            <button
+              onClick={handleNext}
+              className="bg-primary-600 text-white px-6 py-2 rounded-lg hover:bg-primary-700 transition-colors flex items-center gap-2"
+            >
+              {currentQuestionIndex < questions.length - 1 ? (
+                <>
+                  Next Question
+                  <ArrowRight className="w-4 h-4" />
+                </>
+              ) : (
+                'Complete Quiz'
+              )}
+            </button>
+          </div>
         </motion.div>
       )}
     </motion.div>

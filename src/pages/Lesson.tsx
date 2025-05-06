@@ -31,6 +31,17 @@ const Lesson: React.FC = () => {
   const [isPaused, setIsPaused] = useState(false);
   const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
 
+  const [quizData, setQuizData] = useState({
+    question: "What is the main concept covered in this section?",
+    options: [
+      "Option A",
+      "Option B",
+      "Option C",
+      "Option D"
+    ],
+    correctAnswer: 0
+  });
+
   useEffect(() => {
     const storedTopic = localStorage.getItem('selectedTopic');
     if (storedTopic) {
@@ -105,6 +116,7 @@ const Lesson: React.FC = () => {
 
   const handleQuizComplete = (correct: boolean) => {
     setShowQuiz(false);
+    // Additional quiz completion logic can be added here
   };
 
   const handleSlideChange = (index: number) => {
@@ -323,8 +335,9 @@ const Lesson: React.FC = () => {
               className="bg-white rounded-xl shadow-xl max-w-2xl w-full p-6"
             >
               <Quiz 
-                topic={selectedTopic?.title || ''}
-                knowledgeLevel={preferences?.knowledgeLevel || 'beginner'}
+                question={quizData.question}
+                options={quizData.options}
+                correctAnswer={quizData.correctAnswer}
                 onComplete={handleQuizComplete}
               />
             </motion.div>
