@@ -29,11 +29,13 @@ const SlidePresentation: React.FC<SlidePresentationProps> = ({
   const [currentWordIndex, setCurrentWordIndex] = useState(0);
   const [slideProgress, setSlideProgress] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
+  const timelineRef = useRef<HTMLDivElement>(null);
   const animationFrameRef = useRef<number>();
   const startTimeRef = useRef<number>(0);
   const pausedTimeRef = useRef<number>(0);
   const lastNarrationEndRef = useRef<number>(0);
   const speechRef = useRef<SpeechSynthesisUtterance | null>(null);
+  const wordsRef = useRef<string[]>([]);
 
   useEffect(() => {
     const handleFullscreenChange = () => {
@@ -54,6 +56,13 @@ const SlidePresentation: React.FC<SlidePresentationProps> = ({
       startPresentation();
     }
   }, [isPaused, currentSlideIndex]);
+
+  useEffect(() => {
+    // Split current slide narration into words for highlighting
+    if (presentation?.slides?.[currentSlideIndex]) {
+      wordsRef.current = presentation.slides[currentSlideIndex].narration.split(/\s+/);
+    }
+  }, [currentSlideIndex, presentation]);
 
   const startPresentation = () => {
     if (!presentation?.slides?.length) return;
@@ -109,13 +118,12 @@ const SlidePresentation: React.FC<SlidePresentationProps> = ({
     // Update highlighted text based on elapsed time
     const currentSlide = presentation.slides[currentSlideIndex];
     const slideElapsed = elapsed - (totalDuration - currentSlide.duration);
-    const words = currentSlide.narration.split(' ');
-    const wordsPerSecond = words.length / currentSlide.duration;
+    const wordsPerSecond = wordsRef.current.length / currentSlide.duration;
     const wordIndex = Math.floor(slideElapsed * wordsPerSecond);
     
-    if (wordIndex !== currentWordIndex) {
+    if (wordIndex !== currentWordIndex && wordIndex >= 0 && wordIndex < wordsRef.current.length) {
       setCurrentWordIndex(wordIndex);
-      setHighlightedText(words.slice(0, wordIndex).join(' '));
+      setHighlightedText(wordsRef.current.slice(0, wordIndex).join(' '));
     }
 
     // Update slide progress
@@ -123,6 +131,36 @@ const SlidePresentation: React.FC<SlidePresentationProps> = ({
     setSlideProgress(slideProgress);
 
     animationFrameRef.current = requestAnimationFrame(animate);
+  };
+
+  const handleTimelineClick = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (!timelineRef.current) return;
+    
+    const rect = timelineRef.current.getBoundingClientRect();
+    const clickPosition = event.clientX - rect.left;
+    const percentage = clickPosition / rect.width;
+    const totalDuration = presentation.slides.reduce((sum, slide) => sum + slide.duration, 0);
+    const newTime = totalDuration * percentage;
+    
+    // Find the corresponding slide
+    let accumulatedTime = 0;
+    let targetSlideIndex = 0;
+    
+    for (let i = 0; i < presentation.slides.length; i++) {
+      accumulatedTime += presentation.slides[i].duration;
+      if (newTime <= accumulatedTime) {
+        targetSlideIndex = i;
+        break;
+      }
+    }
+    
+    // Update state and trigger callbacks
+    stopPresentation();
+    onSlideChange?.(targetSlideIndex);
+    pausedTimeRef.current = newTime * 1000;
+    if (!isPaused) {
+      startPresentation();
+    }
   };
 
   const handlePrevSlide = () => {
@@ -183,8 +221,35 @@ const SlidePresentation: React.FC<SlidePresentationProps> = ({
       className="bg-white rounded-xl shadow-2xl overflow-hidden flex flex-col"
       style={{ height: isFullscreen ? '100vh' : 'calc(100vh - 8rem)' }}
     >
-      {/* Slide Content */}
+      {/* Main Content */}
       <div className="flex-grow relative bg-gradient-to-br from-blue-50 to-indigo-50 overflow-hidden">
+        {/* Navigation Arrows */}
+        <div className="absolute inset-0 flex items-center justify-between px-4 z-10">
+          <motion.button
+            onClick={handlePrevSlide}
+            disabled={currentSlideIndex === 0}
+            whileHover={{ scale: 1.1 }}
+            whileTap={{ scale: 0.9 }}
+            className={`p-3 rounded-full bg-white/80 shadow-lg backdrop-blur-sm transition-all ${
+              currentSlideIndex === 0 ? 'opacity-0' : 'opacity-100 hover:bg-white'
+            }`}
+          >
+            <ChevronLeft className="w-6 h-6 text-blue-600" />
+          </motion.button>
+          <motion.button
+            onClick={handleNextSlide}
+            disabled={currentSlideIndex === presentation.slides.length - 1}
+            whileHover={{ scale: 1.1 }}
+            whileTap={{ scale: 0.9 }}
+            className={`p-3 rounded-full bg-white/80 shadow-lg backdrop-blur-sm transition-all ${
+              currentSlideIndex === presentation.slides.length - 1 ? 'opacity-0' : 'opacity-100 hover:bg-white'
+            }`}
+          >
+            <ChevronRight className="w-6 h-6 text-blue-600" />
+          </motion.button>
+        </div>
+
+        {/* Slide Content */}
         <AnimatePresence mode="wait">
           <motion.div
             key={currentSlide.id}
@@ -194,33 +259,6 @@ const SlidePresentation: React.FC<SlidePresentationProps> = ({
             transition={{ duration: 0.4, ease: "easeInOut" }}
             className="w-full h-full p-8 flex flex-col items-center justify-center"
           >
-            {/* Navigation Arrows */}
-            <div className="absolute inset-0 flex items-center justify-between px-4 z-10">
-              <motion.button
-                onClick={handlePrevSlide}
-                disabled={currentSlideIndex === 0}
-                whileHover={{ scale: 1.1 }}
-                whileTap={{ scale: 0.9 }}
-                className={`p-3 rounded-full bg-white/80 shadow-lg backdrop-blur-sm transition-all ${
-                  currentSlideIndex === 0 ? 'opacity-0' : 'opacity-100 hover:bg-white'
-                }`}
-              >
-                <ChevronLeft className="w-6 h-6 text-blue-600" />
-              </motion.button>
-              <motion.button
-                onClick={handleNextSlide}
-                disabled={currentSlideIndex === presentation.slides.length - 1}
-                whileHover={{ scale: 1.1 }}
-                whileTap={{ scale: 0.9 }}
-                className={`p-3 rounded-full bg-white/80 shadow-lg backdrop-blur-sm transition-all ${
-                  currentSlideIndex === presentation.slides.length - 1 ? 'opacity-0' : 'opacity-100 hover:bg-white'
-                }`}
-              >
-                <ChevronRight className="w-6 h-6 text-blue-600" />
-              </motion.button>
-            </div>
-
-            {/* Main Content */}
             <div className="max-w-4xl w-full mx-auto">
               <motion.div
                 className="bg-white/90 backdrop-blur-sm rounded-3xl shadow-xl p-10 border border-gray-100"
@@ -289,21 +327,33 @@ const SlidePresentation: React.FC<SlidePresentationProps> = ({
 
       {/* Controls */}
       <div className="p-6 bg-white border-t border-gray-200">
-        <div className="flex items-center gap-4 mb-4">
-          <span className="text-sm font-medium text-gray-600 w-16">
-            {formatTime(elapsedTime)}
-          </span>
-          
-          <div className="flex-grow flex flex-col gap-2">
-            {/* Overall progress */}
-            <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+        {/* Progress Bars */}
+        <div className="space-y-4 mb-6">
+          {/* Overall Timeline */}
+          <div className="space-y-1">
+            <div className="flex justify-between text-sm text-neutral-600">
+              <span>Total Progress</span>
+              <span>{formatTime(elapsedTime)} / {formatTime(totalDuration)}</span>
+            </div>
+            <div 
+              ref={timelineRef}
+              className="h-2 bg-gray-200 rounded-full overflow-hidden cursor-pointer relative group"
+              onClick={handleTimelineClick}
+            >
               <div
-                className="h-full bg-blue-600 rounded-full transition-all duration-300"
+                className="absolute inset-0 h-full bg-blue-600 rounded-full transition-all duration-300"
                 style={{ width: `${progressPercentage}%` }}
               />
+              <div className="absolute inset-0 bg-blue-600/10 opacity-0 group-hover:opacity-100 transition-opacity" />
             </div>
-            
-            {/* Current slide progress */}
+          </div>
+
+          {/* Current Slide Progress */}
+          <div className="space-y-1">
+            <div className="flex justify-between text-sm text-neutral-600">
+              <span>Current Slide</span>
+              <span>{currentSlideIndex + 1} of {presentation.slides.length}</span>
+            </div>
             <div className="h-1 bg-gray-200 rounded-full overflow-hidden">
               <div
                 className="h-full bg-blue-400 rounded-full transition-all duration-300"
@@ -311,17 +361,10 @@ const SlidePresentation: React.FC<SlidePresentationProps> = ({
               />
             </div>
           </div>
-          
-          <span className="text-sm font-medium text-gray-600 w-16">
-            {formatTime(totalDuration)}
-          </span>
         </div>
 
+        {/* Control Buttons */}
         <div className="flex items-center justify-between">
-          <div className="text-sm font-medium text-gray-600">
-            Slide {currentSlideIndex + 1} of {presentation.slides.length}
-          </div>
-
           <div className="flex items-center space-x-4">
             <motion.button
               onClick={onPlayPause}
