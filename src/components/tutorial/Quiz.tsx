@@ -32,13 +32,14 @@ const Quiz: React.FC<QuizProps> = ({
   const [userCode, setUserCode] = useState('');
   const [timeLeft, setTimeLeft] = useState(30);
   const [quizCompleted, setQuizCompleted] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     loadQuizQuestions();
   }, [topic, knowledgeLevel]);
 
   useEffect(() => {
-    if (!showFeedback && !quizCompleted) {
+    if (!showFeedback && !quizCompleted && questions.length > 0) {
       const timer = setInterval(() => {
         setTimeLeft((prev) => {
           if (prev <= 1) {
@@ -52,22 +53,26 @@ const Quiz: React.FC<QuizProps> = ({
 
       return () => clearInterval(timer);
     }
-  }, [showFeedback, currentQuestionIndex, quizCompleted]);
+  }, [showFeedback, currentQuestionIndex, quizCompleted, questions.length]);
 
   const loadQuizQuestions = async () => {
     setIsLoading(true);
+    setError(null);
     try {
       const response = await geminiService.generateQuizQuestions(topic, knowledgeLevel);
       setQuestions(response);
       setTimeLeft(30);
     } catch (error) {
       console.error('Error loading quiz questions:', error);
+      setError('Failed to load quiz questions. Please try again.');
     } finally {
       setIsLoading(false);
     }
   };
 
   const handleAnswer = (index: number) => {
+    if (!questions.length) return;
+    
     const currentQuestion = questions[currentQuestionIndex];
     const isCorrect = index === currentQuestion.correctAnswer;
     
@@ -98,6 +103,23 @@ const Quiz: React.FC<QuizProps> = ({
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mb-4"></div>
           <p className="text-neutral-600">Preparing your quiz...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center p-8">
+        <div className="text-center">
+          <AlertCircle className="w-12 h-12 text-error-600 mx-auto mb-4" />
+          <p className="text-error-600 mb-4">{error}</p>
+          <button
+            onClick={loadQuizQuestions}
+            className="bg-primary-600 text-white px-6 py-2 rounded-lg hover:bg-primary-700 transition-colors"
+          >
+            Try Again
+          </button>
         </div>
       </div>
     );
@@ -175,6 +197,10 @@ const Quiz: React.FC<QuizProps> = ({
         </button>
       </motion.div>
     );
+  }
+
+  if (!questions.length) {
+    return null;
   }
 
   const currentQuestion = questions[currentQuestionIndex];
