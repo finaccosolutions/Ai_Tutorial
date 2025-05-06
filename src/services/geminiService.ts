@@ -35,10 +35,10 @@ class GeminiService {
       this.model = this.genAI.getGenerativeModel({ 
         model: "gemini-2.0-flash",
         generationConfig: {
-          temperature: 0.9,
+          temperature: 0.9, // Increased for more variety
           topK: 40,
           topP: 0.95,
-          maxOutputTokens: 4096,
+          maxOutputTokens: 4096, // Increased for longer responses
         },
       });
     } catch (error) {
@@ -64,9 +64,15 @@ class GeminiService {
   }
 
   private sanitizeJsonResponse(text: string): string {
+    // Remove code fences and any non-JSON content
     let cleaned = text.replace(/```json\n?|\n?```/g, '').trim();
+    
+    // Handle potential line breaks and indentation issues
     cleaned = cleaned.replace(/\n\s+/g, ' ');
+    
+    // Ensure proper quote usage
     cleaned = cleaned.replace(/[""]/g, '"');
+    
     return cleaned;
   }
 
@@ -88,21 +94,21 @@ class GeminiService {
       Create a structured learning path for ${subject} tailored for ${knowledgeLevel} level students in ${language}.
       Consider these learning goals: ${learningGoals.join(', ')}.
 
-      Generate 4-5 comprehensive topics that build upon each other.
+      Generate 5-8 comprehensive topics that build upon each other.
       
       For each topic include:
-      1. Clear, descriptive title that accurately reflects the content
-      2. Detailed description (2-3 sentences) explaining what will be covered
-      3. Realistic estimated duration (5-15 minutes per topic)
-      4. Appropriate difficulty level (Beginner, Intermediate, Advanced)
-      5. 4-6 specific, measurable learning objectives
-      6. Relevant prerequisites that directly relate to the topic
+      1. Clear, descriptive title
+      2. Detailed description of what will be covered
+      3. Estimated duration in minutes (realistic for the content)
+      4. Difficulty level (Beginner, Intermediate, Advanced)
+      5. 3-5 specific learning objectives
+      6. Any prerequisites or required knowledge
       
       Format as a JSON array with these exact keys:
       - id (uuid format)
       - title (string)
       - description (string)
-      - estimatedDuration (number, in minutes, realistic 5-15 minute range)
+      - estimatedDuration (number, in minutes)
       - difficulty (string)
       - learningObjectives (string array)
       - prerequisites (string array)
@@ -113,26 +119,20 @@ class GeminiService {
           "id": "12345678-1234-5678-1234-567812345678",
           "title": "Introduction to Variables",
           "description": "Learn the fundamentals of...",
-          "estimatedDuration": 10,
+          "estimatedDuration": 45,
           "difficulty": "Beginner",
-          "learningObjectives": [
-            "Define and explain what variables are",
-            "Understand different variable types",
-            "Learn proper variable naming conventions",
-            "Practice declaring and initializing variables"
-          ],
-          "prerequisites": ["Basic computer skills", "Understanding of basic math concepts"]
+          "learningObjectives": ["Understand...", "Learn..."],
+          "prerequisites": ["Basic computer skills"]
         }
       ]
 
       Ensure:
-      - Topics progress logically from basic to advanced concepts
+      - Topics progress logically
       - Content matches ${knowledgeLevel} level
-      - Prerequisites are specific and relevant
-      - Duration estimates are realistic (5-15 minutes per topic)
+      - Clear prerequisites between topics
+      - Realistic time estimates
       - Learning objectives are specific and measurable
       - All text is in ${language}
-      - Each topic builds on the previous ones
     `;
 
     try {
@@ -144,26 +144,24 @@ class GeminiService {
         const response = await result.response;
         const text = response.text();
         
+        // Clean and parse the response
         const cleanedText = this.sanitizeJsonResponse(text);
         
         try {
           const topics = JSON.parse(cleanedText);
 
+          // Validate the response format
           if (!Array.isArray(topics)) {
             throw new Error('Invalid response format: not an array');
           }
 
+          // Validate each topic
           topics.forEach((topic, i) => {
             if (!topic.id || !topic.title || !topic.description || 
                 !topic.estimatedDuration || !topic.difficulty || 
                 !Array.isArray(topic.learningObjectives) || 
                 !Array.isArray(topic.prerequisites)) {
               throw new Error(`Invalid topic format at index ${i}`);
-            }
-
-            // Ensure duration is within realistic range
-            if (topic.estimatedDuration < 5 || topic.estimatedDuration > 15) {
-              topic.estimatedDuration = Math.min(Math.max(topic.estimatedDuration, 5), 15);
             }
           });
 
@@ -238,15 +236,18 @@ class GeminiService {
         const response = await result.response;
         const text = response.text();
         
+        // Clean and parse the response
         const cleanedText = this.sanitizeJsonResponse(text);
         
         try {
           const questions = JSON.parse(cleanedText);
 
+          // Validate the response format
           if (!Array.isArray(questions)) {
             throw new Error('Invalid response format: not an array');
           }
 
+          // Validate each question
           questions.forEach((q, i) => {
             if (!q.question || !q.type || !q.correctAnswer || !q.explanation) {
               throw new Error(`Invalid question format at index ${i}`);
@@ -257,6 +258,7 @@ class GeminiService {
             }
           });
 
+          // Shuffle questions
           return questions.sort(() => Math.random() - 0.5);
         } catch (parseError) {
           console.error('Error parsing quiz questions:', parseError);
