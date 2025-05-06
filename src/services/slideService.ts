@@ -137,7 +137,7 @@ class SlideService {
   ]
 }
 
-Create 4-5 comprehensive slides with rich, educational content. Each slide should:
+Create 6-10 comprehensive slides with rich, educational content. Each slide should:
 - Have detailed content with clear headers and well-structured points
 - Include thorough explanations and examples
 - Provide practical applications and real-world context
