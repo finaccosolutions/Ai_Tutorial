@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowLeft, Volume2, VolumeX, MessageSquare, X, AlertCircle } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useUserPreferences } from '../contexts/UserPreferencesContext';
+import { supabase } from '../lib/supabase';
 import geminiService from '../services/geminiService';
 import slideService from '../services/slideService';
 import SlidePresentation from '../components/tutorial/SlidePresentation';
@@ -13,7 +14,7 @@ import type { SlidePresentation as SlidePresentationType } from '../services/sli
 const Lesson: React.FC = () => {
   const { lessonId } = useParams<{ lessonId: string }>();
   const { preferences } = useUserPreferences();
-  const { geminiApiKey } = useAuth();
+  const { geminiApiKey, user } = useAuth();
   const navigate = useNavigate();
   
   const [presentation, setPresentation] = useState<SlidePresentationType | null>(null);
@@ -41,9 +42,10 @@ const Lesson: React.FC = () => {
     }
   }, [navigate]);
 
+  // Load presentation from cache or generate new one
   useEffect(() => {
     const loadPresentation = async () => {
-      if (!selectedTopic || !preferences?.subject || !preferences?.knowledgeLevel || !geminiApiKey) {
+      if (!selectedTopic || !preferences?.subject || !preferences?.knowledgeLevel || !geminiApiKey || !user) {
         return;
       }
 
@@ -51,6 +53,21 @@ const Lesson: React.FC = () => {
       setError(null);
 
       try {
+        // Try to load from cache first
+        const { data: presentations } = await supabase
+          .from('presentation_cache')
+          .select('presentation_data')
+          .eq('user_id', user.id)
+          .eq('topic_id', selectedTopic.id);
+
+        // Check if we have a cached presentation
+        if (presentations && presentations.length > 0) {
+          setPresentation(presentations[0].presentation_data as SlidePresentationType);
+          setIsLoading(false);
+          return;
+        }
+
+        // Generate new presentation if not cached
         slideService.initialize(geminiApiKey);
         const generatedPresentation = await slideService.generateSlidePresentation(
           selectedTopic.title,
@@ -58,6 +75,20 @@ const Lesson: React.FC = () => {
           preferences.language,
           selectedTopic.learningObjectives
         );
+
+        // Cache the generated presentation
+        const { error: insertError } = await supabase
+          .from('presentation_cache')
+          .upsert({
+            user_id: user.id,
+            topic_id: selectedTopic.id,
+            presentation_data: generatedPresentation
+          });
+
+        if (insertError) {
+          console.error('Error caching presentation:', insertError);
+        }
+
         setPresentation(generatedPresentation);
       } catch (error: any) {
         console.error('Error loading presentation:', error);
@@ -68,7 +99,7 @@ const Lesson: React.FC = () => {
     };
 
     loadPresentation();
-  }, [selectedTopic, preferences, geminiApiKey]);
+  }, [selectedTopic, preferences, geminiApiKey, user]);
 
   const handleTimeUpdate = (time: number) => {
     setCurrentTime(time);
@@ -112,53 +143,6 @@ const Lesson: React.FC = () => {
       setIsAnswering(false);
     }
   };
-
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-neutral-50 flex items-center justify-center">
-        <motion.div 
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          className="text-center"
-        >
-          <div className="inline-block h-12 w-12 border-4 border-primary-300 border-t-primary-600 rounded-full animate-spin mb-4"></div>
-          <h2 className="text-2xl font-semibold text-neutral-800">Preparing your lesson...</h2>
-          <p className="mt-2 text-neutral-600">This may take a few moments</p>
-        </motion.div>
-      </div>
-    );
-  }
-
-  if (error || !presentation || !selectedTopic) {
-    return (
-      <div className="min-h-screen bg-neutral-50 flex items-center justify-center">
-        <div className="max-w-lg mx-auto px-4 py-8 text-center">
-          <div className="bg-white rounded-lg shadow-lg p-8 border border-neutral-200">
-            <div className="flex items-center justify-center mb-6">
-              <AlertCircle className="h-12 w-12 text-error-500" />
-            </div>
-            <h2 className="text-2xl font-semibold text-neutral-800 mb-4">Unable to Load Lesson</h2>
-            <p className="text-neutral-600 mb-6">{error}</p>
-            <div className="flex justify-center gap-4">
-              <button
-                onClick={() => navigate('/dashboard')}
-                className="btn btn-secondary flex items-center"
-              >
-                <ArrowLeft className="h-5 w-5 mr-2" />
-                Back to Dashboard
-              </button>
-              <button
-                onClick={() => window.location.reload()}
-                className="btn btn-primary"
-              >
-                Try Again
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-neutral-50 to-primary-50">
@@ -209,18 +193,55 @@ const Lesson: React.FC = () => {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5 }}
           >
-            <h1 className="text-3xl font-bold text-neutral-800 mb-8">{selectedTopic.title}</h1>
+            <h1 className="text-3xl font-bold text-neutral-800 mb-8">{selectedTopic?.title}</h1>
             
             <div className="space-y-8">
-              <SlidePresentation
-                presentation={presentation}
-                isSpeakingEnabled={isSpeakingEnabled}
-                isPaused={isPaused}
-                onPlayPause={handlePlayPause}
-                onTimeUpdate={handleTimeUpdate}
-                onSlideChange={handleSlideChange}
-                currentSlideIndex={currentSlideIndex}
-              />
+              {isLoading ? (
+                <div className="min-h-[60vh] flex items-center justify-center">
+                  <div className="text-center">
+                    <div className="inline-block h-12 w-12 border-4 border-primary-300 border-t-primary-600 rounded-full animate-spin mb-4"></div>
+                    <h2 className="text-2xl font-semibold text-neutral-800">Loading your lesson...</h2>
+                    <p className="mt-2 text-neutral-600">This may take a few moments</p>
+                  </div>
+                </div>
+              ) : error ? (
+                <div className="min-h-[60vh] flex items-center justify-center">
+                  <div className="max-w-lg mx-auto px-4 py-8 text-center">
+                    <div className="bg-white rounded-lg shadow-lg p-8 border border-neutral-200">
+                      <div className="flex items-center justify-center mb-6">
+                        <AlertCircle className="h-12 w-12 text-error-500" />
+                      </div>
+                      <h2 className="text-2xl font-semibold text-neutral-800 mb-4">Unable to Load Lesson</h2>
+                      <p className="text-neutral-600 mb-6">{error}</p>
+                      <div className="flex justify-center gap-4">
+                        <button
+                          onClick={() => navigate('/dashboard')}
+                          className="btn btn-secondary flex items-center"
+                        >
+                          <ArrowLeft className="h-5 w-5 mr-2" />
+                          Back to Dashboard
+                        </button>
+                        <button
+                          onClick={() => window.location.reload()}
+                          className="btn btn-primary"
+                        >
+                          Try Again
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : presentation && (
+                <SlidePresentation
+                  presentation={presentation}
+                  isSpeakingEnabled={isSpeakingEnabled}
+                  isPaused={isPaused}
+                  onPlayPause={handlePlayPause}
+                  onTimeUpdate={handleTimeUpdate}
+                  onSlideChange={handleSlideChange}
+                  currentSlideIndex={currentSlideIndex}
+                />
+              )}
             </div>
           </motion.div>
         </div>

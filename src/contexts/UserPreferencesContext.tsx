@@ -128,6 +128,16 @@ export const UserPreferencesProvider: React.FC<{ children: React.ReactNode }> = 
 
       if (error) throw error;
 
+      // Clear presentation cache for this user
+      const { error: cacheError } = await supabase
+        .from('presentation_cache')
+        .delete()
+        .eq('user_id', user.id);
+
+      if (cacheError) {
+        console.error('Error clearing presentation cache:', cacheError);
+      }
+
       // Reload preferences to ensure we have the latest data
       await loadPreferences();
     } catch (error) {
@@ -159,6 +169,16 @@ export const UserPreferencesProvider: React.FC<{ children: React.ReactNode }> = 
         });
 
       if (error) throw error;
+
+      // Clear presentation cache for this user
+      const { error: cacheError } = await supabase
+        .from('presentation_cache')
+        .delete()
+        .eq('user_id', user.id);
+
+      if (cacheError) {
+        console.error('Error clearing presentation cache:', cacheError);
+      }
 
       // Reload preferences to ensure we have the latest data
       await loadPreferences();
