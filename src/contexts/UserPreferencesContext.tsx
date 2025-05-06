@@ -111,8 +111,6 @@ export const UserPreferencesProvider: React.FC<{ children: React.ReactNode }> = 
 
       if (checkError) throw checkError;
 
-      let error;
-
       // Clear presentation cache first
       const { error: clearError } = await supabase
         .from('presentation_cache')
@@ -120,6 +118,8 @@ export const UserPreferencesProvider: React.FC<{ children: React.ReactNode }> = 
         .eq('user_id', user.id);
 
       if (clearError) throw clearError;
+
+      let error;
 
       if (existingPrefs) {
         // Update existing preferences
