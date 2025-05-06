@@ -20,16 +20,29 @@ class GeminiService {
 
     try {
       this.genAI = new GoogleGenerativeAI(apiKey);
-      this.model = this.genAI.getGenerativeModel({ model: 'gemini-pro' });
+      // Update model configuration to use the correct version
+      this.model = this.genAI.getGenerativeModel({ 
+        model: "gemini-pro",
+        generationConfig: {
+          temperature: 0.7,
+          topK: 40,
+          topP: 0.95,
+          maxOutputTokens: 2048,
+        },
+      });
     } catch (error) {
       console.error('Failed to initialize Gemini API:', error);
-      throw new Error('Failed to initialize Gemini API. Please check your API key.');
+      throw new Error('Failed to initialize Gemini API. Please check your API key and ensure the service is available.');
     }
   }
 
   async generateQuizQuestions(topic: string, level: string): Promise<QuizQuestion[]> {
     if (!this.model) {
       throw new Error('Gemini API not initialized. Please set API key first.');
+    }
+
+    if (!topic || !level) {
+      throw new Error('Topic and level are required to generate quiz questions.');
     }
 
     const prompt = `
@@ -63,30 +76,41 @@ class GeminiService {
     `;
 
     try {
-      const result = await this.model.generateContent(prompt);
+      const result = await this.model.generateContent({
+        contents: [{ role: "user", parts: [{ text: prompt }] }]
+      });
+      
       const response = await result.response;
       const text = response.text();
       
       // Clean and parse the response
       const cleanedText = text.replace(/```json\n?|\n?```/g, '').trim();
-      const questions = JSON.parse(cleanedText);
+      
+      try {
+        const questions = JSON.parse(cleanedText);
 
-      // Validate the response format
-      if (!Array.isArray(questions)) {
-        throw new Error('Invalid response format: not an array');
-      }
-
-      questions.forEach((q, i) => {
-        if (!q.question || !Array.isArray(q.options) || q.options.length !== 4 || 
-            typeof q.correctAnswer !== 'number' || !q.explanation) {
-          throw new Error(`Invalid question format at index ${i}`);
+        // Validate the response format
+        if (!Array.isArray(questions)) {
+          throw new Error('Invalid response format: not an array');
         }
-      });
 
-      return questions;
-    } catch (error) {
+        questions.forEach((q, i) => {
+          if (!q.question || !Array.isArray(q.options) || q.options.length !== 4 || 
+              typeof q.correctAnswer !== 'number' || !q.explanation) {
+            throw new Error(`Invalid question format at index ${i}`);
+          }
+        });
+
+        return questions;
+      } catch (parseError) {
+        console.error('Error parsing quiz questions:', parseError);
+        throw new Error('Failed to parse quiz questions from API response');
+      }
+    } catch (error: any) {
       console.error('Error generating quiz questions:', error);
-      throw new Error('Failed to generate quiz questions');
+      throw new Error(
+        `Failed to generate quiz questions: ${error.message || 'Unknown error occurred'}`
+      );
     }
   }
 
@@ -98,6 +122,10 @@ class GeminiService {
   ): Promise<string> {
     if (!this.model) {
       throw new Error('Gemini API not initialized. Please set API key first.');
+    }
+
+    if (!question || !subject) {
+      throw new Error('Question and subject are required.');
     }
 
     const prompt = `
@@ -115,12 +143,17 @@ class GeminiService {
     `;
 
     try {
-      const result = await this.model.generateContent(prompt);
+      const result = await this.model.generateContent({
+        contents: [{ role: "user", parts: [{ text: prompt }] }]
+      });
+      
       const response = await result.response;
       return response.text();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error generating answer:', error);
-      throw new Error('Failed to generate answer');
+      throw new Error(
+        `Failed to generate answer: ${error.message || 'Unknown error occurred'}`
+      );
     }
   }
 }

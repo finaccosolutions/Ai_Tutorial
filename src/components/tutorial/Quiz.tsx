@@ -35,7 +35,9 @@ const Quiz: React.FC<QuizProps> = ({
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    loadQuizQuestions();
+    if (topic && knowledgeLevel) {
+      loadQuizQuestions();
+    }
   }, [topic, knowledgeLevel]);
 
   useEffect(() => {
@@ -56,6 +58,12 @@ const Quiz: React.FC<QuizProps> = ({
   }, [showFeedback, currentQuestionIndex, quizCompleted, questions.length]);
 
   const loadQuizQuestions = async () => {
+    if (!topic || !knowledgeLevel) {
+      setError('Topic and level are required to generate quiz questions.');
+      setIsLoading(false);
+      return;
+    }
+
     setIsLoading(true);
     setError(null);
     try {

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, Volume2, VolumeX, MessageSquare, X, AlertCircle } from 'lucide-react';
+import { ArrowLeft, Volume2, VolumeX, MessageSquare, X, AlertCircle, Brain } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useUserPreferences } from '../contexts/UserPreferencesContext';
 import { supabase } from '../lib/supabase';
@@ -30,17 +30,6 @@ const Lesson: React.FC = () => {
   const [showQuiz, setShowQuiz] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
-
-  const [quizData, setQuizData] = useState({
-    question: "What is the main concept covered in this section?",
-    options: [
-      "Option A",
-      "Option B",
-      "Option C",
-      "Option D"
-    ],
-    correctAnswer: 0
-  });
 
   useEffect(() => {
     const storedTopic = localStorage.getItem('selectedTopic');
@@ -108,15 +97,10 @@ const Lesson: React.FC = () => {
 
   const handleTimeUpdate = (time: number) => {
     setCurrentTime(time);
-    
-    if (Math.floor(time) % 300 === 0) {
-      setShowQuiz(true);
-    }
   };
 
   const handleQuizComplete = (correct: boolean) => {
     setShowQuiz(false);
-    // Additional quiz completion logic can be added here
   };
 
   const handleSlideChange = (index: number) => {
@@ -165,6 +149,13 @@ const Lesson: React.FC = () => {
           </div>
           
           <div className="flex items-center space-x-4">
+            <button
+              onClick={() => setShowQuiz(true)}
+              className="flex items-center px-4 py-2 rounded-lg bg-primary-100 text-primary-700 hover:bg-primary-200 transition-colors"
+            >
+              <Brain className="h-5 w-5 mr-2" />
+              Take Quiz
+            </button>
             <button
               onClick={() => setIsSpeakingEnabled(!isSpeakingEnabled)}
               className={`p-2 rounded-full transition-colors ${
@@ -334,10 +325,9 @@ const Lesson: React.FC = () => {
               exit={{ scale: 0.9, y: 20 }}
               className="bg-white rounded-xl shadow-xl max-w-2xl w-full p-6"
             >
-              <Quiz 
-                question={quizData.question}
-                options={quizData.options}
-                correctAnswer={quizData.correctAnswer}
+              <Quiz
+                topic={selectedTopic?.title}
+                knowledgeLevel={preferences?.knowledgeLevel}
                 onComplete={handleQuizComplete}
               />
             </motion.div>
