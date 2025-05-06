@@ -1,24 +1,22 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Play, BookOpen, User2, Settings, Clock, Target, Award, RefreshCw, Edit, ChevronRight, BookMarked, Sparkles, Brain } from 'lucide-react';
+import { Play, BookOpen, User2, Settings, Clock, Target, Award, RefreshCw, Edit, ChevronRight, BookMarked, Sparkles, Brain, ChevronDown } from 'lucide-react';
 import { useUserPreferences } from '../contexts/UserPreferencesContext';
 import { useAuth } from '../contexts/AuthContext';
 import geminiService, { Topic } from '../services/geminiService';
 
 const Dashboard: React.FC = () => {
-  const { preferences, updatePreferences, savePreferences } = useUserPreferences();
+  const { preferences } = useUserPreferences();
   const { geminiApiKey, user } = useAuth();
   const navigate = useNavigate();
   
   const [topics, setTopics] = useState<Topic[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [showPreferencesModal, setShowPreferencesModal] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
   const [activeTopicId, setActiveTopicId] = useState<string | null>(null);
+  const [expandedTopics, setExpandedTopics] = useState<string[]>([]);
 
-  // Load or generate topics when preferences change
   useEffect(() => {
     if (!preferences?.subject || !preferences?.knowledgeLevel || !preferences?.language || !geminiApiKey) {
       setIsLoading(false);
@@ -43,11 +41,6 @@ const Dashboard: React.FC = () => {
           preferences.learningGoals || []
         );
         
-        await updatePreferences({
-          ...preferences,
-          topics: newTopics
-        });
-        
         setTopics(newTopics);
       } catch (error: any) {
         console.error('Error loading topics:', error);
@@ -60,27 +53,21 @@ const Dashboard: React.FC = () => {
     loadTopics();
   }, [preferences?.subject, preferences?.knowledgeLevel, preferences?.language, geminiApiKey]);
 
-  const handlePreferencesSave = async (newPreferences: any) => {
-    setIsSaving(true);
-    try {
-      await updatePreferences({
-        ...newPreferences,
-        onboardingCompleted: true,
-        topics: []
-      });
-      await savePreferences();
-      setShowPreferencesModal(false);
-    } catch (error) {
-      console.error('Error saving preferences:', error);
-      setError('Failed to save preferences. Please try again.');
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
   const handleStartLesson = (topic: Topic) => {
     localStorage.setItem('selectedTopic', JSON.stringify(topic));
     navigate(`/lesson/${topic.id}`);
+  };
+
+  const handleCustomizeLearning = () => {
+    navigate('/onboarding');
+  };
+
+  const toggleTopicExpansion = (topicId: string) => {
+    setExpandedTopics(prev => 
+      prev.includes(topicId) 
+        ? prev.filter(id => id !== topicId)
+        : [...prev, topicId]
+    );
   };
 
   const getTopicColor = (index: number) => {
@@ -90,9 +77,7 @@ const Dashboard: React.FC = () => {
       'from-emerald-500 to-teal-600',
       'from-orange-500 to-red-600',
       'from-cyan-500 to-blue-600',
-      'from-rose-500 to-pink-600',
-      'from-amber-500 to-orange-600',
-      'from-lime-500 to-green-600'
+      'from-rose-500 to-pink-600'
     ];
     return colors[index % colors.length];
   };
@@ -133,7 +118,7 @@ const Dashboard: React.FC = () => {
               </div>
               
               <button
-                onClick={() => setShowPreferencesModal(true)}
+                onClick={handleCustomizeLearning}
                 className="bg-white/10 hover:bg-white/20 text-white px-6 py-3 rounded-lg flex items-center gap-2 transition-all duration-300 hover:scale-105"
               >
                 <Edit className="h-5 w-5" />
@@ -275,6 +260,62 @@ const Dashboard: React.FC = () => {
                             </div>
                           </div>
                         )}
+
+                        <button
+                          onClick={() => toggleTopicExpansion(topic.id)}
+                          className="w-full flex items-center justify-between p-3 bg-neutral-50 rounded-lg text-neutral-700 hover:bg-neutral-100 transition-colors"
+                        >
+                          <span className="font-medium">View Subtopics</span>
+                          <ChevronDown
+                            className={`h-5 w-5 transition-transform ${
+                              expandedTopics.includes(topic.id) ? 'rotate-180' : ''
+                            }`}
+                          />
+                        </button>
+
+                        <AnimatePresence>
+                          {expandedTopics.includes(topic.id) && (
+                            <motion.div
+                              initial={{ height: 0, opacity: 0 }}
+                              animate={{ height: 'auto', opacity: 1 }}
+                              exit={{ height: 0, opacity: 0 }}
+                              transition={{ duration: 0.3 }}
+                              className="overflow-hidden"
+                            >
+                              <div className="space-y-4 pt-4">
+                                {topic.subtopics.map((subtopic, i) => (
+                                  <div
+                                    key={i}
+                                    className="bg-neutral-50 rounded-lg p-4"
+                                  >
+                                    <div className="flex items-center justify-between mb-2">
+                                      <h5 className="font-medium text-neutral-800">
+                                        {subtopic.title}
+                                      </h5>
+                                      <span className="text-sm text-neutral-500">
+                                        {subtopic.duration} min
+                                      </span>
+                                    </div>
+                                    <p className="text-sm text-neutral-600 mb-3">
+                                      {subtopic.description}
+                                    </p>
+                                    <div className="space-y-2">
+                                      {subtopic.objectives.map((objective, j) => (
+                                        <div
+                                          key={j}
+                                          className="flex items-center gap-2 text-sm text-neutral-600"
+                                        >
+                                          <div className="h-1.5 w-1.5 rounded-full bg-primary-400" />
+                                          {objective}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
 
                         {topic.prerequisites.length > 0 && (
                           <div className="border-t border-neutral-200 pt-4 mt-4">
