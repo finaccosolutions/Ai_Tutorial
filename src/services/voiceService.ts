@@ -1,15 +1,14 @@
-import { SpeechSynthesisUtterance } from 'web-speech-api';
+// Voice service for text-to-speech and speech-to-text functionality
 
 let currentUtterance: SpeechSynthesisUtterance | null = null;
 let retryCount = 0;
 const MAX_RETRIES = 3;
 const RETRY_DELAY = 500;
 
-// Text-to-speech function with word boundary events
+// Text-to-speech function
 export const speak = (
   text: string, 
-  onWordSpoken?: (word: string, index: number) => void,
-  onEnd?: () => void,
+  onEnd?: () => void, 
   rate = 1
 ): SpeechSynthesisUtterance | null => {
   if (!window.speechSynthesis) {
@@ -52,26 +51,6 @@ export const speak = (
     utterance.rate = rate;
     utterance.pitch = 1;
     utterance.volume = 1;
-
-    // Add word boundary event
-    utterance.onboundary = (event) => {
-      if (event.name === 'word' && onWordSpoken) {
-        const words = text.split(' ');
-        const charIndex = event.charIndex;
-        let wordCount = 0;
-        let charCount = 0;
-        
-        for (let i = 0; i < words.length; i++) {
-          charCount += words[i].length + 1; // +1 for space
-          if (charCount > charIndex) {
-            wordCount = i;
-            break;
-          }
-        }
-        
-        onWordSpoken(words[wordCount], wordCount);
-      }
-    };
     
     // Event handlers
     utterance.onend = () => {

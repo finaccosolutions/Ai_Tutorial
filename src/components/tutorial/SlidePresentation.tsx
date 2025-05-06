@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Play, Pause, Volume2, VolumeX, Maximize2, ChevronLeft, ChevronRight, Clock, SkipBack, SkipForward, BookOpen, Lightbulb, Code, CheckCircle2, Target } from 'lucide-react';
+import { Play, Pause, Volume2, VolumeX, Maximize2, ChevronLeft, ChevronRight, Clock, SkipBack, SkipForward } from 'lucide-react';
 import type { SlidePresentation } from '../../services/slideService';
 import { speak, stopSpeaking } from '../../services/voiceService';
 
@@ -37,8 +37,6 @@ const SlidePresentation: React.FC<SlidePresentationProps> = ({
   const lastNarrationEndRef = useRef<number>(0);
   const speechRef = useRef<SpeechSynthesisUtterance | null>(null);
   const wordsRef = useRef<string[]>([]);
-  const lastWordUpdateRef = useRef<number>(0);
-  const WORD_UPDATE_INTERVAL = 50; // ms
 
   useEffect(() => {
     const handleFullscreenChange = () => {
@@ -120,22 +118,17 @@ const SlidePresentation: React.FC<SlidePresentationProps> = ({
     const currentSlide = presentation.slides[currentSlideIndex];
     const slideElapsed = elapsed - (totalDuration - currentSlide.duration);
     const wordsPerSecond = wordsRef.current.length / currentSlide.duration;
-
-    if (now - lastWordUpdateRef.current >= WORD_UPDATE_INTERVAL) {
-      const wordIndex = Math.floor(slideElapsed * wordsPerSecond);
-      if (wordIndex !== currentWordIndex && wordIndex >= 0 && wordIndex < wordsRef.current.length) {
-        setCurrentWordIndex(wordIndex);
-        setHighlightedText(wordsRef.current.slice(0, wordIndex).join(' '));
-      }
-      lastWordUpdateRef.current = now;
+    const wordIndex = Math.floor(slideElapsed * wordsPerSecond);
+    
+    if (wordIndex !== currentWordIndex && wordIndex >= 0 && wordIndex < wordsRef.current.length) {
+      setCurrentWordIndex(wordIndex);
+      setHighlightedText(wordsRef.current.slice(0, wordIndex).join(' '));
     }
 
     const progress = Math.min((slideElapsed / currentSlide.duration) * 100, 100);
     setSlideProgress(progress);
 
-    if (!isPaused) {
-      animationFrameRef.current = requestAnimationFrame(animate);
-    }
+    animationFrameRef.current = requestAnimationFrame(animate);
   };
 
   const handleTimelineClick = (event: React.MouseEvent<HTMLDivElement>) => {
@@ -202,148 +195,6 @@ const SlidePresentation: React.FC<SlidePresentationProps> = ({
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  const renderSlideContent = (content: string) => {
-    const sections = content.split('\n\n').map(section => {
-      if (section.startsWith('# ')) {
-        return { type: 'title', content: section.slice(2) };
-      } else if (section.startsWith('## ')) {
-        return { type: 'subtitle', content: section.slice(3) };
-      } else if (section.startsWith('- ')) {
-        return { type: 'list', content: section.split('\n').map(item => item.slice(2)) };
-      } else if (section.startsWith('1. ')) {
-        return { type: 'ordered-list', content: section.split('\n').map(item => item.slice(3)) };
-      } else if (section.includes('|')) {
-        const rows = section.split('\n');
-        return { type: 'table', content: rows.map(row => row.split('|').filter(cell => cell.trim())) };
-      } else {
-        return { type: 'paragraph', content: section };
-      }
-    });
-
-    return sections.map((section, index) => {
-      switch (section.type) {
-        case 'title':
-          return (
-            <motion.h1
-              key={index}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.2 }}
-              className="text-4xl font-bold text-primary-800 mb-6"
-            >
-              {section.content}
-            </motion.h1>
-          );
-        case 'subtitle':
-          return (
-            <motion.h2
-              key={index}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.3 }}
-              className="text-2xl font-semibold text-primary-700 mb-4 flex items-center gap-2"
-            >
-              <Lightbulb className="w-6 h-6" />
-              {section.content}
-            </motion.h2>
-          );
-        case 'list':
-          return (
-            <motion.ul
-              key={index}
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: 0.4 }}
-              className="space-y-3 mb-6"
-            >
-              {section.content.map((item, i) => (
-                <motion.li
-                  key={i}
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: 0.4 + i * 0.1 }}
-                  className="flex items-start gap-3 bg-white/50 p-3 rounded-lg shadow-sm"
-                >
-                  <CheckCircle2 className="w-5 h-5 text-primary-600 mt-0.5" />
-                  <span className="text-lg text-neutral-800">{item}</span>
-                </motion.li>
-              ))}
-            </motion.ul>
-          );
-        case 'ordered-list':
-          return (
-            <motion.ol
-              key={index}
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: 0.4 }}
-              className="space-y-3 mb-6"
-            >
-              {section.content.map((item, i) => (
-                <motion.li
-                  key={i}
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: 0.4 + i * 0.1 }}
-                  className="flex items-start gap-3 bg-white/50 p-3 rounded-lg shadow-sm"
-                >
-                  <div className="flex-shrink-0 w-6 h-6 rounded-full bg-primary-100 flex items-center justify-center text-primary-700 font-medium">
-                    {i + 1}
-                  </div>
-                  <span className="text-lg text-neutral-800">{item}</span>
-                </motion.li>
-              ))}
-            </motion.ol>
-          );
-        case 'table':
-          return (
-            <motion.div
-              key={index}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.5 }}
-              className="overflow-x-auto mb-6"
-            >
-              <table className="w-full border-collapse bg-white rounded-lg shadow-sm">
-                <thead>
-                  <tr>
-                    {section.content[0].map((header: string, i: number) => (
-                      <th key={i} className="p-3 text-left bg-primary-50 text-primary-700 border-b-2 border-primary-100">
-                        {header}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {section.content.slice(1).map((row: string[], i: number) => (
-                    <tr key={i} className={i % 2 === 0 ? 'bg-white' : 'bg-primary-50/30'}>
-                      {row.map((cell: string, j: number) => (
-                        <td key={j} className="p-3 border-t border-primary-100/30">
-                          {cell}
-                        </td>
-                      ))}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </motion.div>
-          );
-        default:
-          return (
-            <motion.p
-              key={index}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.3 }}
-              className="text-lg leading-relaxed mb-4 text-neutral-800"
-            >
-              {section.content}
-            </motion.p>
-          );
-      }
-    });
-  };
-
   if (!presentation?.slides?.length) {
     return (
       <div className="flex items-center justify-center min-h-[80vh] bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl shadow-lg">
@@ -359,7 +210,7 @@ const SlidePresentation: React.FC<SlidePresentationProps> = ({
   return (
     <div 
       ref={containerRef}
-      className="bg-gradient-to-br from-primary-50 via-primary-100/30 to-primary-200/30 rounded-xl shadow-2xl overflow-hidden flex flex-col"
+      className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl shadow-2xl overflow-hidden flex flex-col"
       style={{ height: isFullscreen ? '100vh' : 'calc(100vh - 8rem)' }}
     >
       {/* Main Content */}
@@ -367,7 +218,7 @@ const SlidePresentation: React.FC<SlidePresentationProps> = ({
         {/* Navigation Arrows */}
         <div className="absolute inset-0 flex items-center justify-between px-4 z-10">
           <motion.button
-            onClick={() => onSlideChange?.(currentSlideIndex - 1)}
+            onClick={handlePrevSlide}
             disabled={currentSlideIndex === 0}
             whileHover={{ scale: 1.1 }}
             whileTap={{ scale: 0.9 }}
@@ -375,10 +226,10 @@ const SlidePresentation: React.FC<SlidePresentationProps> = ({
               currentSlideIndex === 0 ? 'opacity-0' : 'opacity-100 hover:bg-white'
             }`}
           >
-            <ChevronLeft className="w-6 h-6 text-primary-600" />
+            <ChevronLeft className="w-6 h-6 text-blue-600" />
           </motion.button>
           <motion.button
-            onClick={() => onSlideChange?.(currentSlideIndex + 1)}
+            onClick={handleNextSlide}
             disabled={currentSlideIndex === presentation.slides.length - 1}
             whileHover={{ scale: 1.1 }}
             whileTap={{ scale: 0.9 }}
@@ -386,7 +237,7 @@ const SlidePresentation: React.FC<SlidePresentationProps> = ({
               currentSlideIndex === presentation.slides.length - 1 ? 'opacity-0' : 'opacity-100 hover:bg-white'
             }`}
           >
-            <ChevronRight className="w-6 h-6 text-primary-600" />
+            <ChevronRight className="w-6 h-6 text-blue-600" />
           </motion.button>
         </div>
 
@@ -400,20 +251,52 @@ const SlidePresentation: React.FC<SlidePresentationProps> = ({
             transition={{ duration: 0.4, ease: "easeInOut" }}
             className="w-full h-full p-8 flex flex-col items-center justify-center"
           >
-            <div className="max-w-5xl w-full mx-auto">
+            <div className="max-w-4xl w-full mx-auto">
               <motion.div
                 className="bg-white/95 backdrop-blur-sm rounded-3xl shadow-xl p-10 border border-white/20"
                 initial={{ scale: 0.95, y: 20 }}
                 animate={{ scale: 1, y: 0 }}
                 transition={{ duration: 0.4 }}
               >
-                {renderSlideContent(currentSlide.content)}
+                <motion.h2 
+                  className="text-3xl font-bold text-gray-800 mb-6"
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.2 }}
+                >
+                  {currentSlide.content.split('\n')[0]}
+                </motion.h2>
+                
+                <div className="prose prose-lg max-w-none">
+                  {currentSlide.narration.split('\n').map((paragraph, i) => (
+                    <motion.p 
+                      key={i}
+                      className="mb-4 leading-relaxed"
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.3 + i * 0.1 }}
+                    >
+                      {!isPaused ? (
+                        <>
+                          <span className="text-blue-600 font-medium">
+                            {highlightedText}
+                          </span>
+                          <span className="text-gray-600">
+                            {paragraph.slice(highlightedText.length)}
+                          </span>
+                        </>
+                      ) : (
+                        <span className="text-gray-800">{paragraph}</span>
+                      )}
+                    </motion.p>
+                  ))}
+                </div>
               </motion.div>
 
               {/* Visual Aid */}
               {currentSlide.visualAid && (
                 <motion.div
-                  className="mt-8 w-full max-w-4xl mx-auto"
+                  className="mt-8 w-full max-w-3xl mx-auto"
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ 
                     opacity: imageLoaded ? 1 : 0,
@@ -435,12 +318,12 @@ const SlidePresentation: React.FC<SlidePresentationProps> = ({
       </div>
 
       {/* Controls */}
-      <div className="bg-primary-900/95 backdrop-blur-sm border-t border-primary-800/20 p-4 text-white">
+      <div className="bg-white/95 backdrop-blur-sm border-t border-white/20 p-6">
         {/* Progress Bars */}
-        <div className="space-y-3 mb-4">
+        <div className="space-y-4 mb-6">
           {/* Overall Timeline */}
           <div className="space-y-2">
-            <div className="flex justify-between text-sm">
+            <div className="flex justify-between text-sm text-gray-600">
               <div className="flex items-center">
                 <Clock className="w-4 h-4 mr-2" />
                 <span>Total Progress</span>
@@ -449,30 +332,31 @@ const SlidePresentation: React.FC<SlidePresentationProps> = ({
             </div>
             <div 
               ref={timelineRef}
-              className="h-2 bg-primary-700/30 rounded-full overflow-hidden cursor-pointer relative group"
+              className="h-2 bg-gray-200 rounded-full overflow-hidden cursor-pointer relative group"
               onClick={handleTimelineClick}
             >
               <motion.div
-                className="absolute inset-0 h-full bg-primary-400 rounded-full"
+                className="absolute inset-0 h-full bg-blue-600 rounded-full"
+                style={{ width: `${progressPercentage}%` }}
                 animate={{ width: `${progressPercentage}%` }}
                 transition={{ duration: 0.1 }}
               />
-              <div className="absolute inset-0 bg-primary-400/10 opacity-0 group-hover:opacity-100 transition-opacity" />
+              <div className="absolute inset-0 bg-blue-600/10 opacity-0 group-hover:opacity-100 transition-opacity" />
             </div>
           </div>
 
           {/* Current Slide Progress */}
           <div className="space-y-2">
-            <div className="flex justify-between text-sm">
+            <div className="flex justify-between text-sm text-gray-600">
               <div className="flex items-center">
                 <SkipForward className="w-4 h-4 mr-2" />
                 <span>Current Slide</span>
               </div>
               <span>{currentSlideIndex + 1} of {presentation.slides.length}</span>
             </div>
-            <div className="h-1 bg-primary-700/30 rounded-full overflow-hidden">
+            <div className="h-1 bg-gray-200 rounded-full overflow-hidden">
               <motion.div
-                className="h-full bg-primary-400 rounded-full"
+                className="h-full bg-blue-400 rounded-full"
                 animate={{ width: `${slideProgress}%` }}
                 transition={{ duration: 0.1 }}
               />
@@ -482,21 +366,21 @@ const SlidePresentation: React.FC<SlidePresentationProps> = ({
 
         {/* Control Buttons */}
         <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-3">
+          <div className="flex items-center space-x-4">
             <motion.button
               onClick={onPlayPause}
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
-              className={`p-3 rounded-lg shadow-lg transition-all ${
+              className={`p-4 rounded-full shadow-lg transition-all ${
                 isPaused 
-                  ? 'bg-primary-400 hover:bg-primary-500' 
+                  ? 'bg-blue-600 hover:bg-blue-700' 
                   : 'bg-red-500 hover:bg-red-600'
-              }`}
+              } text-white`}
             >
               {isPaused ? (
-                <Play className="w-5 h-5" />
+                <Play className="w-6 h-6" />
               ) : (
-                <Pause className="w-5 h-5" />
+                <Pause className="w-6 h-6" />
               )}
             </motion.button>
 
@@ -504,11 +388,11 @@ const SlidePresentation: React.FC<SlidePresentationProps> = ({
               onClick={() => {}}
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
-              className={`p-2 rounded-lg ${
+              className={`p-3 rounded-full shadow-sm ${
                 isSpeakingEnabled 
-                  ? 'bg-primary-400/30 text-primary-200' 
-                  : 'bg-primary-800/30 text-primary-400'
-              } hover:bg-primary-700/30 transition-colors`}
+                  ? 'bg-blue-100 text-blue-600' 
+                  : 'bg-gray-100 text-gray-600'
+              } hover:bg-blue-200 transition-colors`}
             >
               {isSpeakingEnabled ? (
                 <Volume2 className="w-5 h-5" />
@@ -521,32 +405,32 @@ const SlidePresentation: React.FC<SlidePresentationProps> = ({
               onClick={toggleFullscreen}
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
-              className="p-2 rounded-lg bg-primary-800/30 text-primary-400 hover:bg-primary-700/30 transition-colors"
+              className="p-3 rounded-full bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors"
             >
               <Maximize2 className="w-5 h-5" />
             </motion.button>
+          </div>
 
-            {/* Slide Navigation */}
-            <div className="flex items-center space-x-2">
-              <motion.button
-                onClick={() => onSlideChange?.(currentSlideIndex - 1)}
-                disabled={currentSlideIndex === 0}
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                className="p-2 rounded-lg bg-primary-800/30 text-primary-400 hover:bg-primary-700/30 transition-colors disabled:opacity-50"
-              >
-                <SkipBack className="w-5 h-5" />
-              </motion.button>
-              <motion.button
-                onClick={() => onSlideChange?.(currentSlideIndex + 1)}
-                disabled={currentSlideIndex === presentation.slides.length - 1}
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                className="p-2 rounded-lg bg-primary-800/30 text-primary-400 hover:bg-primary-700/30 transition-colors disabled:opacity-50"
-              >
-                <SkipForward className="w-5 h-5" />
-              </motion.button>
-            </div>
+          {/* Slide Navigation */}
+          <div className="flex items-center space-x-3">
+            <motion.button
+              onClick={handlePrevSlide}
+              disabled={currentSlideIndex === 0}
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              className="p-2 rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors disabled:opacity-50"
+            >
+              <SkipBack className="w-5 h-5" />
+            </motion.button>
+            <motion.button
+              onClick={handleNextSlide}
+              disabled={currentSlideIndex === presentation.slides.length - 1}
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              className="p-2 rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors disabled:opacity-50"
+            >
+              <SkipForward className="w-5 h-5" />
+            </motion.button>
           </div>
         </div>
       </div>
