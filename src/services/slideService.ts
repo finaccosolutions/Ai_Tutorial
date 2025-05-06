@@ -121,32 +121,50 @@ class SlideService {
       throw new Error('Gemini API not initialized. Please set API key first.');
     }
 
-    const prompt = `Generate an engaging educational presentation about "${topic}" for ${level} level students in ${language}. Consider these learning goals: ${learningGoals.join(', ')}. Return ONLY a JSON object with the following structure:
+    const prompt = `
+      Create a detailed educational presentation about "${topic}" for ${level} level students in ${language}.
+      Consider these learning goals: ${learningGoals.join(', ')}.
 
-{
-  "title": "Main presentation title",
-  "description": "Brief overview of the presentation",
-  "slides": [
-    {
-      "id": "slide_1",
-      "content": "# Main Concept\\n\\n## Key Points\\n- Detailed explanation of first point\\n- In-depth coverage of second point\\n- Practical examples and applications\\n\\n## Real-world Applications\\n1. Industry example\\n2. Practical use case\\n3. Common scenarios",
-      "narration": "Detailed speaking script that thoroughly explains the concepts in a conversational tone",
-      "duration": 90,
-      "visualAid": "Detailed description for relevant image"
-    }
-  ]
-}
+      Generate a comprehensive presentation with:
+      - 6-8 detailed slides
+      - Each slide should have 2-3 minutes of content
+      - Include practical examples, diagrams, and real-world applications
+      - Progressive difficulty building up concepts
+      - Clear explanations and step-by-step breakdowns
+      - Visual aids that enhance understanding
 
-Create 4-5 comprehensive slides with rich, educational content. Each slide should:
-- Have detailed content with clear headers and well-structured points
-- Include thorough explanations and examples
-- Provide practical applications and real-world context
-- Have a natural, engaging narration script in ${language}
-- Include relevant visual aid descriptions
-- Have a duration between 60-120 seconds for proper coverage`;
+      Return a JSON object with this structure:
+      {
+        "title": "Main presentation title",
+        "description": "Brief overview",
+        "slides": [
+          {
+            "id": "slide_1",
+            "content": "Detailed slide content with headers, bullet points, and examples",
+            "narration": "Natural speaking script that thoroughly explains concepts",
+            "duration": 120,
+            "visualAid": "Description of relevant image or diagram"
+          }
+        ]
+      }
+
+      For each slide:
+      - Content should be comprehensive and detailed
+      - Include code examples where relevant
+      - Break down complex concepts
+      - Use clear headings and structure
+      - Keep narration natural and engaging
+      - Ensure visual aids enhance learning
+      - Duration should be realistic (120-180 seconds)`;
 
     try {
       const presentation = await this.retryGenerateContent(prompt);
+
+      // Validate and adjust slide durations
+      presentation.slides = presentation.slides.map(slide => ({
+        ...slide,
+        duration: Math.min(Math.max(slide.duration, 120), 180) // Ensure 2-3 minute duration
+      }));
 
       const finalPresentation = {
         ...presentation,
@@ -162,15 +180,8 @@ Create 4-5 comprehensive slides with rich, educational content. Each slide shoul
       return finalPresentation;
     } catch (error) {
       console.error('Error generating presentation:', error);
-      
-      if (error instanceof SyntaxError) {
-        throw new Error('Failed to parse the AI response. Please try again.');
-      } else if (error instanceof Error && error.message.includes('Invalid presentation format')) {
-        throw new Error('The AI generated an invalid presentation structure. Please try again.');
-      }
-      
       throw new Error(
-        error instanceof Error ? error.message : 'Failed to generate presentation. Please try again.'
+        error instanceof Error ? error.message : 'Failed to generate presentation'
       );
     }
   }
