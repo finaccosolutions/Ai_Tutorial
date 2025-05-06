@@ -137,13 +137,12 @@ class SlideService {
   ]
 }
 
-Create 6-10 comprehensive slides with rich, educational content. Each slide should:
+Create appropriate number of comprehensive slides with rich, educational content. Each slide should:
 - Have detailed content with clear headers and well-structured points
 - Include thorough explanations and examples
 - Provide practical applications and real-world context
 - Have a natural, engaging narration script in ${language}
-- Include relevant visual aid descriptions
-- Have a duration between 60-120 seconds for proper coverage`;
+- Include relevant visual aid descriptions including tables,graphs,images,grpahs`;
 
     try {
       const presentation = await this.retryGenerateContent(prompt);
