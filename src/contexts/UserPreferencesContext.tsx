@@ -40,38 +40,40 @@ export const UserPreferencesProvider: React.FC<{ children: React.ReactNode }> = 
   // Load preferences when user changes
   useEffect(() => {
     if (user) {
-      const loadPreferences = async () => {
-        try {
-          const { data, error } = await supabase
-            .from('user_preferences')
-            .select('*')
-            .eq('user_id', user.id)
-            .maybeSingle();
-
-          if (error) {
-            console.error('Error loading preferences:', error);
-            return;
-          }
-
-          if (data) {
-            setPreferences({
-              subject: data.subject || '',
-              knowledgeLevel: data.knowledge_level || 'beginner',
-              language: data.language || 'English',
-              learningGoals: data.learning_goals || [],
-              onboardingCompleted: data.onboarding_completed || false
-            });
-          }
-        } catch (error) {
-          console.error('Error loading preferences:', error);
-        }
-      };
-
       loadPreferences();
     } else {
       setPreferences(null);
     }
   }, [user]);
+
+  const loadPreferences = async () => {
+    if (!user) return;
+
+    try {
+      const { data, error } = await supabase
+        .from('user_preferences')
+        .select('*')
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      if (error) {
+        console.error('Error loading preferences:', error);
+        return;
+      }
+
+      if (data) {
+        setPreferences({
+          subject: data.subject || '',
+          knowledgeLevel: data.knowledge_level || 'beginner',
+          language: data.language || 'English',
+          learningGoals: data.learning_goals || [],
+          onboardingCompleted: data.onboarding_completed || false
+        });
+      }
+    } catch (error) {
+      console.error('Error loading preferences:', error);
+    }
+  };
 
   // Update preferences locally and in database
   const updatePreferences = async (newPreferences: Partial<UserPreferences>) => {
@@ -120,6 +122,9 @@ export const UserPreferencesProvider: React.FC<{ children: React.ReactNode }> = 
       }
 
       if (error) throw error;
+
+      // Reload preferences to ensure we have the latest data
+      await loadPreferences();
     } catch (error) {
       console.error('Error updating preferences:', error);
       throw error;
@@ -140,31 +145,17 @@ export const UserPreferencesProvider: React.FC<{ children: React.ReactNode }> = 
         onboarding_completed: preferences.onboardingCompleted
       };
 
-      // Check if preferences exist
-      const { data: existingPrefs, error: checkError } = await supabase
+      const { error } = await supabase
         .from('user_preferences')
-        .select('id')
-        .eq('user_id', user.id)
-        .maybeSingle();
-
-      if (checkError) throw checkError;
-
-      let error;
-
-      if (existingPrefs) {
-        // Update existing preferences
-        ({ error } = await supabase
-          .from('user_preferences')
-          .update(prefsData)
-          .eq('user_id', user.id));
-      } else {
-        // Insert new preferences
-        ({ error } = await supabase
-          .from('user_preferences')
-          .insert([prefsData]));
-      }
+        .upsert(prefsData, {
+          onConflict: 'user_id',
+          ignoreDuplicates: false
+        });
 
       if (error) throw error;
+
+      // Reload preferences to ensure we have the latest data
+      await loadPreferences();
     } catch (error) {
       console.error('Error saving preferences:', error);
       throw error;
