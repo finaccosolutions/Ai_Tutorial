@@ -32,7 +32,6 @@ const Lesson: React.FC = () => {
   const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
 
   useEffect(() => {
-    // Load the selected topic from localStorage
     const storedTopic = localStorage.getItem('selectedTopic');
     if (storedTopic) {
       setSelectedTopic(JSON.parse(storedTopic));
@@ -42,7 +41,6 @@ const Lesson: React.FC = () => {
     }
   }, [navigate]);
 
-  // Load presentation from cache or generate new one
   useEffect(() => {
     const loadPresentation = async () => {
       if (!selectedTopic || !preferences?.subject || !preferences?.knowledgeLevel || !geminiApiKey || !user) {
@@ -53,21 +51,18 @@ const Lesson: React.FC = () => {
       setError(null);
 
       try {
-        // Try to load from cache first
         const { data: presentations } = await supabase
           .from('presentation_cache')
           .select('presentation_data')
           .eq('user_id', user.id)
           .eq('topic_id', selectedTopic.id);
 
-        // Check if we have a cached presentation
         if (presentations && presentations.length > 0) {
           setPresentation(presentations[0].presentation_data as SlidePresentationType);
           setIsLoading(false);
           return;
         }
 
-        // Generate new presentation if not cached
         slideService.initialize(geminiApiKey);
         const generatedPresentation = await slideService.generateSlidePresentation(
           selectedTopic.title,
@@ -76,7 +71,6 @@ const Lesson: React.FC = () => {
           selectedTopic.learningObjectives
         );
 
-        // Cache the generated presentation
         const { error: insertError } = await supabase
           .from('presentation_cache')
           .upsert({
@@ -104,7 +98,6 @@ const Lesson: React.FC = () => {
   const handleTimeUpdate = (time: number) => {
     setCurrentTime(time);
     
-    // Show quiz every 5 minutes
     if (Math.floor(time) % 300 === 0) {
       setShowQuiz(true);
     }
@@ -314,6 +307,30 @@ const Lesson: React.FC = () => {
         )}
       </AnimatePresence>
 
+      {/* Quiz Modal */}
+      <AnimatePresence>
+        {showQuiz && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.9, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.9, y: 20 }}
+              className="bg-white rounded-xl shadow-xl max-w-2xl w-full p-6"
+            >
+              <Quiz 
+                topic={selectedTopic?.title || ''}
+                knowledgeLevel={preferences?.knowledgeLevel || 'beginner'}
+                onComplete={handleQuizComplete}
+              />
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };

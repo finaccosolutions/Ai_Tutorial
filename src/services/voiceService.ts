@@ -1,36 +1,28 @@
-// Voice service for text-to-speech and speech-to-text functionality
-
 let currentUtterance: SpeechSynthesisUtterance | null = null;
 let retryCount = 0;
 const MAX_RETRIES = 3;
 const RETRY_DELAY = 500;
 
-// Text-to-speech function
 export const speak = (
   text: string, 
   onEnd?: () => void, 
-  rate = 1
+  rate = 1,
+  onBoundary?: (event: SpeechSynthesisEvent) => void
 ): SpeechSynthesisUtterance | null => {
   if (!window.speechSynthesis) {
     console.error('Speech synthesis not supported in this browser');
     return null;
   }
 
-  // Reset retry count for new speech
   retryCount = 0;
-
-  // Cancel any ongoing speech
   stopSpeaking();
 
-  // Create utterance
   const utterance = new SpeechSynthesisUtterance(text);
   currentUtterance = utterance;
   
-  // Wait for voices to be loaded
   const loadVoices = () => {
     const voices = window.speechSynthesis.getVoices();
     
-    // Try to find a voice in the user's preferred language
     const preferredVoices = voices.filter(voice => 
       voice.lang.toLowerCase().includes('en') || 
       voice.lang.toLowerCase().includes('hi') ||
@@ -47,12 +39,10 @@ export const speak = (
       utterance.voice = voices[0];
     }
     
-    // Set properties
     utterance.rate = rate;
     utterance.pitch = 1;
     utterance.volume = 1;
     
-    // Event handlers
     utterance.onend = () => {
       if (currentUtterance === utterance) {
         currentUtterance = null;
@@ -90,6 +80,10 @@ export const speak = (
         if (onEnd) onEnd();
       }
     };
+
+    if (onBoundary) {
+      utterance.onboundary = onBoundary;
+    }
     
     try {
       if (!window.speechSynthesis.speaking) {
@@ -114,7 +108,6 @@ export const speak = (
   return utterance;
 };
 
-// Stop speaking
 export const stopSpeaking = (): void => {
   if (window.speechSynthesis) {
     try {
@@ -128,14 +121,12 @@ export const stopSpeaking = (): void => {
   }
 };
 
-// Speech recognition states
 export enum ListeningState {
   INACTIVE,
   LISTENING,
   PROCESSING
 }
 
-// Speech recognition function
 export const startListening = (
   onResult: (text: string) => void,
   onStateChange: (state: ListeningState) => void,
