@@ -4,12 +4,13 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Play, BookOpen, User2, Settings, Clock, Target, Award, RefreshCw, Edit } from 'lucide-react';
 import { useUserPreferences } from '../contexts/UserPreferencesContext';
 import { useAuth } from '../contexts/AuthContext';
+import { supabase } from '../lib/supabase';
 import geminiService, { Topic } from '../services/geminiService';
 import Onboarding from './Onboarding';
 
 const Dashboard: React.FC = () => {
   const { preferences, updatePreferences, savePreferences } = useUserPreferences();
-  const { geminiApiKey } = useAuth();
+  const { geminiApiKey, user } = useAuth();
   const navigate = useNavigate();
   
   const [topics, setTopics] = useState<Topic[]>([]);
@@ -17,18 +18,9 @@ const Dashboard: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [showPreferencesModal, setShowPreferencesModal] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  
-  // Check if API key is set
+
+  // Load topics from localStorage or database, fallback to Gemini
   useEffect(() => {
-    if (!geminiApiKey) {
-      navigate('/api-key-setup');
-      return;
-    }
-  }, [geminiApiKey, navigate]);
-  
-  // Load topics based on user preferences
-  useEffect(() => {
-    // Only proceed if we have all required data
     if (!preferences?.subject || !preferences?.knowledgeLevel || !preferences?.language || !geminiApiKey) {
       setIsLoading(false);
       return;
@@ -37,15 +29,74 @@ const Dashboard: React.FC = () => {
     const loadTopics = async () => {
       setIsLoading(true);
       setError(null);
+
       try {
-        const topics = await geminiService.generateTopicsList(
+        // Try loading from localStorage first
+        const storedTopics = localStorage.getItem(`topics_${preferences.subject}`);
+        if (storedTopics) {
+          setTopics(JSON.parse(storedTopics));
+          setIsLoading(false);
+          return;
+        }
+
+        // Try loading from database
+        const { data: existingTopics, error: dbError } = await supabase
+          .from('user_topics')
+          .select('topics')
+          .eq('user_id', user?.id)
+          .eq('subject', preferences.subject)
+          .maybeSingle();
+
+        if (!dbError && existingTopics?.topics) {
+          setTopics(existingTopics.topics);
+          localStorage.setItem(`topics_${preferences.subject}`, JSON.stringify(existingTopics.topics));
+          setIsLoading(false);
+          return;
+        }
+
+        // If no stored topics, generate new ones
+        const newTopics = await geminiService.generateTopicsList(
           preferences.subject,
           preferences.knowledgeLevel,
           preferences.language,
           preferences.learningGoals || []
         );
         
-        setTopics(topics);
+        setTopics(newTopics);
+        
+        // Store in localStorage
+        localStorage.setItem(`topics_${preferences.subject}`, JSON.stringify(newTopics));
+
+        // Check if a record exists for this user and subject
+        const { data: existingRecord } = await supabase
+          .from('user_topics')
+          .select('id')
+          .eq('user_id', user?.id)
+          .eq('subject', preferences.subject)
+          .maybeSingle();
+
+        if (existingRecord) {
+          // Update existing record
+          await supabase
+            .from('user_topics')
+            .update({
+              topics: newTopics,
+              last_updated: new Date().toISOString()
+            })
+            .eq('user_id', user?.id)
+            .eq('subject', preferences.subject);
+        } else {
+          // Insert new record
+          await supabase
+            .from('user_topics')
+            .insert({
+              user_id: user?.id,
+              subject: preferences.subject,
+              topics: newTopics,
+              last_updated: new Date().toISOString()
+            });
+        }
+
       } catch (error: any) {
         console.error('Error loading topics:', error);
         setError(error.message || 'Failed to load topics. Please try again.');
@@ -56,6 +107,22 @@ const Dashboard: React.FC = () => {
 
     loadTopics();
   }, [preferences?.subject, preferences?.knowledgeLevel, preferences?.language, geminiApiKey]);
+
+  // Restore page state when returning to dashboard
+  useEffect(() => {
+    const savedScrollPosition = localStorage.getItem('dashboardScrollPosition');
+    if (savedScrollPosition) {
+      window.scrollTo(0, parseInt(savedScrollPosition));
+    }
+
+    // Save scroll position when leaving
+    const handleBeforeUnload = () => {
+      localStorage.setItem('dashboardScrollPosition', window.scrollY.toString());
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, []);
 
   const handleStartLesson = (topic: Topic) => {
     localStorage.setItem('selectedTopic', JSON.stringify(topic));

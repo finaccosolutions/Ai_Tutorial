@@ -62,13 +62,23 @@ export const UserPreferencesProvider: React.FC<{ children: React.ReactNode }> = 
       }
 
       if (data) {
-        setPreferences({
+        const loadedPrefs = {
           subject: data.subject || '',
           knowledgeLevel: data.knowledge_level || 'beginner',
           language: data.language || 'English',
           learningGoals: data.learning_goals || [],
           onboardingCompleted: data.onboarding_completed || false
-        });
+        };
+        setPreferences(loadedPrefs);
+        
+        // Store in localStorage for persistence
+        localStorage.setItem('userPreferences', JSON.stringify(loadedPrefs));
+      } else {
+        // Try loading from localStorage if no DB data
+        const storedPrefs = localStorage.getItem('userPreferences');
+        if (storedPrefs) {
+          setPreferences(JSON.parse(storedPrefs));
+        }
       }
     } catch (error) {
       console.error('Error loading preferences:', error);
@@ -87,6 +97,7 @@ export const UserPreferencesProvider: React.FC<{ children: React.ReactNode }> = 
       };
 
       setPreferences(updatedPreferences as UserPreferences);
+      localStorage.setItem('userPreferences', JSON.stringify(updatedPreferences));
 
       const prefsData = {
         user_id: user.id,
@@ -153,6 +164,9 @@ export const UserPreferencesProvider: React.FC<{ children: React.ReactNode }> = 
         });
 
       if (error) throw error;
+
+      // Store in localStorage
+      localStorage.setItem('userPreferences', JSON.stringify(preferences));
 
       // Reload preferences to ensure we have the latest data
       await loadPreferences();
