@@ -39,7 +39,6 @@ const SlidePresentation: React.FC<SlidePresentationProps> = ({
   const wordsRef = useRef<string[]>([]);
   const slideDurationRef = useRef<number>(0);
   const slideStartTimeRef = useRef<number>(0);
-  const highlightTimeoutRef = useRef<NodeJS.Timeout>();
 
   useEffect(() => {
     const handleFullscreenChange = () => {
@@ -98,20 +97,11 @@ const SlidePresentation: React.FC<SlidePresentationProps> = ({
           }
         },
         1,
-        (event) => {
-          if (event.charIndex !== undefined) {
-            // Clear any existing timeout
-            if (highlightTimeoutRef.current) {
-              clearTimeout(highlightTimeoutRef.current);
-            }
-
-            // Set a new timeout to update the highlighted text
-            highlightTimeoutRef.current = setTimeout(() => {
-              const text = event.target?.text || '';
-              const upToChar = text.slice(0, event.charIndex + event.length);
-              setHighlightedText(upToChar);
-            }, 16); // ~60fps
-          }
+        () => {
+          const elapsed = (performance.now() - slideStartTimeRef.current) / 1000;
+          const wordIndex = Math.floor((elapsed / slideDurationRef.current) * wordsRef.current.length);
+          setCurrentWordIndex(Math.min(wordIndex, wordsRef.current.length - 1));
+          setHighlightedText(wordsRef.current.slice(0, wordIndex + 1).join(' '));
         }
       );
     }
@@ -122,9 +112,6 @@ const SlidePresentation: React.FC<SlidePresentationProps> = ({
   const stopPresentation = () => {
     if (animationFrameRef.current) {
       cancelAnimationFrame(animationFrameRef.current);
-    }
-    if (highlightTimeoutRef.current) {
-      clearTimeout(highlightTimeoutRef.current);
     }
     pausedTimeRef.current = performance.now() - startTimeRef.current;
     if (speechRef.current) {
@@ -149,6 +136,17 @@ const SlidePresentation: React.FC<SlidePresentationProps> = ({
     const currentSlide = presentation.slides[currentSlideIndex];
     const slideElapsed = elapsed - (totalDuration - currentSlide.duration);
     
+    const wordsPerSecond = wordsRef.current.length / currentSlide.duration;
+    const wordIndex = Math.min(
+      Math.floor(slideElapsed * wordsPerSecond),
+      wordsRef.current.length - 1
+    );
+    
+    if (wordIndex !== currentWordIndex && wordIndex >= 0) {
+      setCurrentWordIndex(wordIndex);
+      setHighlightedText(wordsRef.current.slice(0, wordIndex + 1).join(' '));
+    }
+
     const progress = Math.min((slideElapsed / currentSlide.duration) * 100, 100);
     setSlideProgress(progress);
 
@@ -301,12 +299,14 @@ const SlidePresentation: React.FC<SlidePresentationProps> = ({
                       transition={{ delay: 0.3 + i * 0.1 }}
                     >
                       {!isPaused ? (
-                        <span className="text-white/90">
-                          <span className="text-pink-300 font-medium transition-all duration-200">
+                        <>
+                          <span className="text-pink-300 font-medium">
                             {highlightedText}
                           </span>
-                          {paragraph.slice(highlightedText.length)}
-                        </span>
+                          <span className="text-white/80">
+                            {paragraph.slice(highlightedText.length)}
+                          </span>
+                        </>
                       ) : (
                         <span className="text-white/90">{paragraph}</span>
                       )}
@@ -394,6 +394,23 @@ const SlidePresentation: React.FC<SlidePresentationProps> = ({
                 <Play className="w-5 h-5 text-white" />
               ) : (
                 <Pause className="w-5 h-5 text-white" />
+              )}
+            </motion.button>
+
+            <motion.button
+              onClick={() => setIsSpeakingEnabled(!isSpeakingEnabled)}
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              className={`p-2 rounded-full ${
+                isSpeakingEnabled 
+                  ? 'bg-purple-500/50' 
+                  : 'bg-white/20'
+              }`}
+            >
+              {isSpeakingEnabled ? (
+                <Volume2 className="w-4 h-4 text-white" />
+              ) : (
+                <VolumeX className="w-4 h-4 text-white" />
               )}
             </motion.button>
 
