@@ -1,221 +1,200 @@
 import React, { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
-import { Key, User, Settings as SettingsIcon, Save, Globe, BookOpen, RefreshCw } from 'lucide-react';
-import { useUserPreferences, KnowledgeLevel, Language } from '../contexts/UserPreferencesContext';
-import geminiService from '../services/geminiService';
+import { Link, useNavigate } from 'react-router-dom';
+import { Key, Info, AlertCircle, Loader2, RefreshCw, Trash2, Home, MessageSquare } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
 
 const Settings: React.FC = () => {
-  const { preferences, updatePreferences, savePreferences } = useUserPreferences();
+  const { geminiApiKey, updateGeminiApiKey, user } = useAuth();
+  const navigate = useNavigate();
   
-  // Local state
   const [apiKey, setApiKey] = useState('');
-  const [subject, setSubject] = useState('');
-  const [knowledgeLevel, setKnowledgeLevel] = useState<KnowledgeLevel>('beginner');
-  const [language, setLanguage] = useState<Language>('english');
-  const [isSaving, setIsSaving] = useState(false);
-  const [saveSuccess, setSaveSuccess] = useState(false);
+  const [generating, setGenerating] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
   
-  // Load preferences
   useEffect(() => {
-    if (preferences) {
-      setSubject(preferences.subject || '');
-      setKnowledgeLevel(preferences.knowledgeLevel || 'beginner');
-      setLanguage(preferences.language || 'english');
+    if (geminiApiKey) {
+      setApiKey(geminiApiKey);
     }
+  }, [geminiApiKey]);
+
+  const saveApiKey = async () => {
+    if (!apiKey.trim()) return;
     
-    // Try to load API key from localStorage (for demo)
-    const storedApiKey = localStorage.getItem('gemini_api_key');
-    if (storedApiKey) {
-      setApiKey(storedApiKey);
-    }
-  }, [preferences]);
-  
-  // Handle save
-  const handleSave = async () => {
-    setIsSaving(true);
+    setGenerating(true);
     setError(null);
-    setSaveSuccess(false);
+    setSuccess(null);
     
     try {
-      // Save API key
-      localStorage.setItem('gemini_api_key', apiKey);
-      geminiService.setApiKey(apiKey);
-      
-      // Save preferences
-      await updatePreferences({
-        subject,
-        knowledgeLevel,
-        language
-      });
-      
-      await savePreferences();
-      
-      setSaveSuccess(true);
-      setTimeout(() => setSaveSuccess(false), 3000);
+      await updateGeminiApiKey(apiKey);
+      setSuccess('API key saved successfully!');
+      setTimeout(() => {
+        navigate('/dashboard');
+      }, 1500);
     } catch (err) {
-      console.error('Error saving settings:', err);
-      setError('Failed to save settings. Please try again.');
+      setError('Failed to save API key. Please try again.');
     } finally {
-      setIsSaving(false);
+      setGenerating(false);
     }
   };
-  
+
+  const deleteApiKey = async () => {
+    setDeleting(true);
+    setError(null);
+    setSuccess(null);
+    
+    try {
+      await updateGeminiApiKey('');
+      setSuccess('API key removed successfully!');
+      setApiKey('');
+      setTimeout(() => {
+        navigate('/dashboard');
+      }, 1500);
+    } catch (err) {
+      setError('Failed to remove API key. Please try again.');
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   return (
-    <div className="min-h-screen bg-neutral-50 pt-8 pb-12 px-4">
-      <div className="container mx-auto max-w-3xl">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5 }}
-        >
-          <div className="flex items-center mb-8">
-            <SettingsIcon className="h-8 w-8 text-primary-600 mr-3" />
-            <h1 className="text-3xl font-bold text-neutral-800">Settings</h1>
-          </div>
-          
-          <div className="bg-white rounded-xl shadow-sm border border-neutral-200 overflow-hidden">
-            {/* API Key Section */}
-            <div className="p-6 border-b border-neutral-200">
-              <h2 className="text-xl font-semibold text-neutral-800 mb-4 flex items-center">
-                <Key className="h-5 w-5 mr-2 text-primary-600" />
-                Gemini API Configuration
-              </h2>
-              
-              <div className="mb-6">
-                <label htmlFor="apiKey" className="block text-sm font-medium text-neutral-700 mb-1">
-                  API Key
-                </label>
-                <div className="mt-1 relative rounded-md shadow-sm">
-                  <input
-                    type="password"
-                    name="apiKey"
-                    id="apiKey"
-                    className="input pr-10"
-                    placeholder="Enter your Gemini API key"
-                    value={apiKey}
-                    onChange={(e) => setApiKey(e.target.value)}
-                  />
-                </div>
-                <p className="mt-2 text-sm text-neutral-500">
-                  You need a Gemini API key to generate personalized content. 
-                  Get your key from the <a href="https://ai.google.dev/" target="_blank" rel="noopener noreferrer" className="text-primary-600 hover:text-primary-800">Google AI Developer</a> site.
-                </p>
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 to-white py-12 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-md w-full">
+        <div className="relative">
+          <div className="absolute -inset-1 bg-gradient-to-r from-blue-600 to-purple-600 rounded-lg blur opacity-25"></div>
+          <div className="relative bg-white p-8 rounded-lg shadow-xl border border-gray-100">
+            <div className="text-center mb-8">
+              <div className="mx-auto w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mb-4">
+                <Key className="w-8 h-8 text-blue-600" />
               </div>
-            </div>
-            
-            {/* Learning Preferences */}
-            <div className="p-6 border-b border-neutral-200">
-              <h2 className="text-xl font-semibold text-neutral-800 mb-4 flex items-center">
-                <User className="h-5 w-5 mr-2 text-primary-600" />
-                Learning Preferences
+              <h2 className="text-2xl font-bold text-gray-900 mb-2">
+                {geminiApiKey ? 'Update Your Gemini API Key' : 'Set Up Your Gemini API Key'}
               </h2>
-              
-              <div className="space-y-6">
-                <div>
-                  <label htmlFor="subject" className="block text-sm font-medium text-neutral-700 mb-1">
-                    Subject or Course
-                  </label>
-                  <div className="mt-1 relative rounded-md shadow-sm">
-                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                      <BookOpen className="h-5 w-5 text-neutral-400" />
-                    </div>
-                    <input
-                      type="text"
-                      name="subject"
-                      id="subject"
-                      className="input pl-10"
-                      placeholder="e.g., Python Programming, Data Science"
-                      value={subject}
-                      onChange={(e) => setSubject(e.target.value)}
-                    />
-                  </div>
-                </div>
-                
-                <div>
-                  <label htmlFor="knowledgeLevel" className="block text-sm font-medium text-neutral-700 mb-1">
-                    Knowledge Level
-                  </label>
-                  <div className="mt-1 relative rounded-md shadow-sm">
-                    <select
-                      id="knowledgeLevel"
-                      name="knowledgeLevel"
-                      className="input"
-                      value={knowledgeLevel}
-                      onChange={(e) => setKnowledgeLevel(e.target.value as KnowledgeLevel)}
-                    >
-                      <option value="beginner">Beginner</option>
-                      <option value="intermediate">Intermediate</option>
-                      <option value="advanced">Advanced</option>
-                    </select>
-                  </div>
-                </div>
-                
-                <div>
-                  <label htmlFor="language" className="block text-sm font-medium text-neutral-700 mb-1">
-                    Preferred Language
-                  </label>
-                  <div className="mt-1 relative rounded-md shadow-sm">
-                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                      <Globe className="h-5 w-5 text-neutral-400" />
-                    </div>
-                    <select
-                      id="language"
-                      name="language"
-                      className="input pl-10"
-                      value={language}
-                      onChange={(e) => setLanguage(e.target.value as Language)}
-                    >
-                      <option value="english">English</option>
-                      <option value="spanish">Hindi</option>
-                      <option value="french">Malayalam</option>
-                      <option value="german">Tamil</option>
-                      <option value="chinese">Kannada</option>
-                      <option value="japanese">Marati</option>
-                      <option value="hindi">Telugu</option>
-                    </select>
-                  </div>
+              <p className="text-gray-600">
+                {geminiApiKey 
+                  ? 'Update or remove your existing Gemini API key'
+                  : 'Enter your Gemini API key to start using the AI assistant'}
+              </p>
+            </div>
+
+            <div className="bg-blue-50 border-l-4 border-blue-500 p-4 mb-6 rounded-r-lg">
+              <div className="flex items-start gap-3">
+                <Info className="w-5 h-5 text-blue-500 flex-shrink-0 mt-0.5" />
+                <div className="text-sm text-blue-700">
+                  <p className="font-medium mb-1">How to get your API key:</p>
+                  <ol className="list-decimal ml-4 space-y-1">
+                    <li>Visit the <a href="https://makersuite.google.com/app/apikey" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-800 underline">Google AI Studio</a></li>
+                    <li>Sign in with your Google account</li>
+                    <li>Create a new API key or use an existing one</li>
+                    <li>Copy and paste your API key here</li>
+                  </ol>
                 </div>
               </div>
             </div>
-            
-            {/* Action Buttons */}
-            <div className="p-6 bg-neutral-50 flex items-center justify-between">
+
+            {error && (
+              <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-3">
+                <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0" />
+                <p className="text-red-700 text-sm">{error}</p>
+              </div>
+            )}
+
+            {success && (
+              <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg flex items-center gap-3">
+                <Info className="w-5 h-5 text-green-500 flex-shrink-0" />
+                <p className="text-green-700 text-sm">{success}</p>
+              </div>
+            )}
+
+            <div className="mb-6">
+              <label htmlFor="apiKey" className="block text-sm font-medium text-gray-700 mb-2">
+                Gemini API Key
+              </label>
+              <input
+                type="password"
+                id="apiKey"
+                value={apiKey}
+                onChange={(e) => setApiKey(e.target.value)}
+                placeholder="Enter your Gemini API key"
+                className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-300"
+              />
+            </div>
+
+            <div className="space-y-4">
               <button
-                type="button"
-                className="btn btn-secondary flex items-center"
-                onClick={() => window.location.reload()}
+                onClick={saveApiKey}
+                disabled={generating || !apiKey.trim()}
+                className="w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white font-medium py-3 px-4 rounded-lg hover:from-blue-700 hover:to-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
-                <RefreshCw className="h-4 w-4 mr-2" />
-                Reset
+                {generating ? (
+                  <>
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  <>
+                    {geminiApiKey ? (
+                      <>
+                        <RefreshCw className="w-5 h-5" />
+                        Update API Key
+                      </>
+                    ) : (
+                      <>
+                        <Key className="w-5 h-5" />
+                        Save API Key
+                      </>
+                    )}
+                  </>
+                )}
               </button>
-              
-              <div className="flex items-center space-x-3">
-                {error && (
-                  <span className="text-sm text-error-600">{error}</span>
-                )}
-                
-                {saveSuccess && (
-                  <span className="text-sm text-success-600">Settings saved successfully!</span>
-                )}
-                
+
+              {geminiApiKey && (
                 <button
-                  type="button"
-                  onClick={handleSave}
-                  disabled={isSaving}
-                  className={`btn btn-primary flex items-center ${isSaving ? 'opacity-70 cursor-not-allowed' : ''}`}
+                  onClick={deleteApiKey}
+                  disabled={deleting}
+                  className="w-full bg-red-50 text-red-600 font-medium py-3 px-4 rounded-lg hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 border border-red-200"
                 >
-                  {isSaving ? (
-                    <span className="inline-block h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></span>
+                  {deleting ? (
+                    <>
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                      Deleting...
+                    </>
                   ) : (
-                    <Save className="h-4 w-4 mr-2" />
+                    <>
+                      <Trash2 className="w-5 h-5" />
+                      Delete API Key
+                    </>
                   )}
-                  {isSaving ? 'Saving...' : 'Save Settings'}
                 </button>
+              )}
+
+              <div className="flex gap-4 mt-6">
+                {geminiApiKey ? (
+                  <Link
+                    to="/dashboard"
+                    className="flex-1 bg-blue-50 text-blue-600 font-medium py-3 px-4 rounded-lg hover:bg-blue-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 flex items-center justify-center gap-2 border border-blue-200"
+                  >
+                    <MessageSquare className="w-5 h-5" />
+                    Go to Dashboard
+                  </Link>
+                ) : (
+                  <Link
+                    to="/"
+                    className="flex-1 bg-gray-50 text-gray-600 font-medium py-3 px-4 rounded-lg hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 flex items-center justify-center gap-2 border border-gray-200"
+                  >
+                    <Home className="w-5 h-5" />
+                    Back to Home
+                  </Link>
+                )}
               </div>
             </div>
+
+            <p className="mt-4 text-sm text-gray-500 text-center">
+              Your API key will be securely stored and used only for your account.
+            </p>
           </div>
-        </motion.div>
+        </div>
       </div>
     </div>
   );

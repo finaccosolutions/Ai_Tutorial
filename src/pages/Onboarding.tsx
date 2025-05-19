@@ -20,7 +20,7 @@ const steps = [
 ];
 
 const Onboarding: React.FC<OnboardingProps> = ({ isEditing = false, onComplete, onCancel }) => {
-  const { user } = useAuth();
+  const { user, geminiApiKey } = useAuth();
   const { preferences, updatePreferences, savePreferences } = useUserPreferences();
   const navigate = useNavigate();
   
@@ -134,7 +134,13 @@ const Onboarding: React.FC<OnboardingProps> = ({ isEditing = false, onComplete, 
       } else {
         await updatePreferences(newPreferences);
         await savePreferences();
-        navigate('/dashboard');
+        
+        // Check if API key exists, if not redirect to API setup
+        if (!geminiApiKey) {
+          navigate('/api-key-setup');
+        } else {
+          navigate('/dashboard');
+        }
       }
     } catch (error) {
       console.error('Error saving preferences:', error);
@@ -520,3 +526,5 @@ const Onboarding: React.FC<OnboardingProps> = ({ isEditing = false, onComplete, 
 };
 
 export default Onboarding;
+
+export default Onboarding

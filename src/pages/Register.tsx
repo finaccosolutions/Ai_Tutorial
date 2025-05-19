@@ -10,6 +10,7 @@ const Register: React.FC = () => {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
   const { register } = useAuth();
@@ -58,6 +59,7 @@ const Register: React.FC = () => {
     }
     
     setError('');
+    setSuccess('');
     setIsLoading(true);
     
     try {
@@ -65,10 +67,12 @@ const Register: React.FC = () => {
       const { error: authError } = data || { error: null };
       
       if (authError) throw authError;
+
+      setSuccess(`Verification mail sent to ${email}`);
       
       // If registration is successful, navigate to onboarding regardless of user object
       // This handles cases where email verification is required
-      navigate('/onboarding');
+      //navigate('/onboarding');
     } catch (err: any) {
       console.error('Registration error:', err);
       
@@ -106,6 +110,12 @@ const Register: React.FC = () => {
             {error && (
               <div className="mb-4 p-3 bg-error-50 border border-error-200 text-error-700 rounded-lg">
                 {error}
+              </div>
+            )}
+
+            {success && (
+              <div className="mb-4 p-3 bg-green-50 border border-green-200 text-green-700 rounded-lg">
+                {success}
               </div>
             )}
             
