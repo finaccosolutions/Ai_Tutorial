@@ -20,17 +20,25 @@ const Dashboard: React.FC = () => {
   const [hoveredTopic, setHoveredTopic] = useState<string | null>(null);
 
   useEffect(() => {
+    // Check if we should show loading state
+    const showLoading = localStorage.getItem('showDashboardLoading') === 'true';
+    if (showLoading) {
+      setIsLoading(true);
+      localStorage.removeItem('showDashboardLoading');
+    } else {
+      setIsLoading(preferences?.topics ? false : true);
+    }
+
     if (!preferences?.subject || !preferences?.knowledgeLevel || !preferences?.language || !geminiApiKey) {
       setIsLoading(false);
       return;
     }
 
     const loadTopics = async () => {
-      setIsLoading(true);
       setError(null);
 
       try {
-        if (preferences.topics && preferences.topics.length > 0) {
+        if (preferences.topics && preferences.topics.length > 0 && !showLoading) {
           setTopics(preferences.topics);
           setIsLoading(false);
           return;

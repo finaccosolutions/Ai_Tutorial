@@ -134,11 +134,23 @@ const Onboarding: React.FC<OnboardingProps> = ({ isEditing = false, onComplete, 
       } else {
         await updatePreferences(newPreferences);
         await savePreferences();
-        
-        // Check if API key exists, if not redirect to API setup
-        if (!geminiApiKey) {
+
+        // Check if API key exists
+        const { data: userData, error: userError } = await supabase
+          .from('users')
+          .select('gemini_api_key')
+          .eq('id', user.id)
+          .single();
+
+        if (userError) {
+          throw userError;
+        }
+
+        // Navigate based on API key existence
+        if (!userData?.gemini_api_key) {
           navigate('/api-key-setup');
         } else {
+          localStorage.setItem('showDashboardLoading', 'true');
           navigate('/dashboard');
         }
       }
@@ -526,5 +538,3 @@ const Onboarding: React.FC<OnboardingProps> = ({ isEditing = false, onComplete, 
 };
 
 export default Onboarding;
-
-export default Onboarding
